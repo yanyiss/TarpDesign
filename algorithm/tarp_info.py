@@ -2,66 +2,47 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-class HardLoss(nn.Module):
-    def __init__(self, vertex, faces, data):
-        super(HardLoss, self).__init__()
-        
+class tarp_info():
+    def __init__(self,vertex,data):
+
         batch_size=vertex.size(0)
         self.nv = vertex.size(1)
-        self.nf = faces.size(0)
-        self.activated=np.ones([6])
         
         #small coef
-        self.register_buffer('elp',torch.tensor(data[0]))
-        
+        self.elp=torch.tensor(data[0]).cuda()
         #stiffnesss                  unit: kg/(m * s^2)
-        self.register_buffer('k',torch.tensor(data[1]))
-        
+        self.k=torch.tensor(data[1]).cuda()
         #mass
-        self.register_buffer('mass',torch.tensor(data[2]))
-        
+        self.mass=torch.tensor(data[2]).cuda()
         #gravity                     unit: N
         G=np.zeros([batch_size,self.nv,3]).astype(np.float32)
         G[:,:,2]=-data[2]*data[3]/self.nv
-        self.register_buffer('G',torch.from_numpy(G))
-        
+        self.G=torch.from_numpy(G).cuda()
         #maximum force on the rope   unit: N
-        self.register_buffer('Fmax',torch.tensor(data[4]))
-        
+        self.Fmax=torch.tensor(data[4]).cuda()
         #minimum height of the tarp  unit: m
-        self.register_buffer('Hmin',torch.tensor(data[5]))
-        
+        self.Hmin=torch.tensor(data[5]).cuda()
         #the height of the sticks    unit: m
-        self.register_buffer('H',torch.tensor(data[6]))
-        
+        self.H=torch.tensor(data[6]).cuda()
         #maximum length of the rope  unit: m
-        self.register_buffer('Lmax',torch.tensor(data[7]))
-        
-        #index of mesh center
-        self.register_buffer('CI',torch.tensor(int(data[8])))
-        
+        self.Lmax=torch.tensor(data[7]).cuda()
+        #index of mesh center which is fixed
+        self.CI=torch.tensor(int(data[8])).cuda()
         #maximum radius of the mesh
-        self.register_buffer('Rmax',torch.tensor(1.1*torch.sqrt(torch.sum(vertex[:,:,0:2]**2,dim=2).max())))
-        
+        self.Rmax=torch.tensor(1.1*torch.sqrt(torch.sum(vertex[:,:,0:2]**2,dim=2).max())).cuda()
         #vertex that connect with a rope
-        self.register_buffer('C0',torch.from_numpy(data[11:11+int(data[9])].astype(int)))
-        
+        self.C0=torch.from_numpy(data[11:11+int(data[9])].astype(int)).cuda()
         #vertex that connect with a rope and a stick
-        self.register_buffer('C1',torch.from_numpy(data[-int(data[10]):].astype(int)))
-        
-        self.register_buffer('fixed',vertex[:,self.C1,:])
-        prr=vertex[:,self.C0,:]
-        prr[:,:,2]=2.0
-        self.register_buffer('fixedp',prr)
-        
-        
+        self.C1=torch.from_numpy(data[-int(data[10]):].astype(int)).cuda()
+        #vertex that are forced
+        self.C=torch.cat([self.C0,self.C1],dim=0)
         #vertically upward direction
         n=np.zeros([batch_size,self.C1.size(0),3]).astype(np.float32)
         n[:,:,2]=1.0
-        self.register_buffer('n',torch.from_numpy(n))
+        self.n=torch.from_numpy(n).cuda()
         
         
-        #incidence matrix
+        """ #incidence matrix
         adj = np.zeros([1,self.nv, self.nv]).astype(np.float32)
         adj[0,faces[:,0],faces[:,1]]=1
         adj[0,faces[:,1],faces[:,0]]=1
@@ -87,16 +68,11 @@ class HardLoss(nn.Module):
         len12=vertex[0,fa1,:]-vertex[0,fa2,:]
         self.register_buffer('len12',torch.sqrt(torch.sum(len12**2,dim=1)).unsqueeze(dim=0).t().repeat(1,3))
         len20=vertex[0,fa2,:]-vertex[0,fa0,:]
-        self.register_buffer('len20',torch.sqrt(torch.sum(len20**2,dim=1)).unsqueeze(dim=0).t().repeat(1,3))
+        self.register_buffer('len20',torch.sqrt(torch.sum(len20**2,dim=1)).unsqueeze(dim=0).t().repeat(1,3)) """
         
     
-    def logelp(self,x, elp=0.0):
-        if elp>0.0:
-            return torch.where(x<elp,-(x-elp)**2*torch.log(x/elp)/(elp**2),0.0)
-        else:
-            return torch.where(x<self.elp,-(x-self.elp)**2*torch.log(x/self.elp)/(self.elp**2),0.0)
         
-    def local_equivalenceloss(self, x, f, activated):
+    """ def local_equivalenceloss(self, x, f, activated):
         if activated == False:
             return torch.zeros([1]).cuda()
         batch_size=x.size(0)
@@ -225,4 +201,4 @@ class HardLoss(nn.Module):
             +1e5*self.fixedloss(x,self.activated[2])\
             +self.forceconstraintloss(x,f,self.activated[3])\
             +self.positionloss(x,self.activated[4])\
-            +1e3*self.length_loss(x,f,x0,x1,faces,self.activated[5],dt)
+            +1e3*self.length_loss(x,f,x0,x1,faces,self.activated[5],dt) """

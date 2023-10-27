@@ -24,5 +24,10 @@ def main():
     print(c.reshape(5,3))
     #print(x-x.reshape(1,))
 
+    i=torch.from_numpy(np.array([1,2,3])).cuda()
+    j=torch.from_numpy(np.array([3,7,1,2])).cuda()
+    print(torch.cat([i,j],dim=0))
+
+
 if __name__ == '__main__':
     main()

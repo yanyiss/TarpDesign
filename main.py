@@ -33,7 +33,7 @@ class SimulationWidget(QOpenGLWidget):
         gluPerspective(45.0, self.width() / self.height(), 0.1, 100.0)
         
         # Camera properties
-        self.cam_position = np.array([5.0, 0.0, 5.0])
+        self.cam_position = np.array([0.0, 5.0, 5.0])
         self.cam_target = np.array([0.0, 0.0, 2.45])
         self.cam_up_vector = np.array([0.0, 0.0, 1.0])
         
@@ -46,7 +46,7 @@ class SimulationWidget(QOpenGLWidget):
 
         self.df=deform.deform()
         self.faces=self.df.model.template_mesh.faces[0].clone().detach().cpu().numpy()
-        self.df.get_init_force()
+        self.df.set_init_force()
 
     
     def mousePressEvent(self, event):
@@ -62,29 +62,11 @@ class SimulationWidget(QOpenGLWidget):
         dx = event.x() - self.mouse_last_position.x()
         dy = event.y() - self.mouse_last_position.y()
 
+        #self.simulation_widget.cam_position += self.simulation_widget.move_speed * self.simulation_widget.cam_up_vector
         self.cam_target += self.rotate_speed * np.array([-dx, dy, 0])
         self.mouse_last_position = event.pos()
 
         self.update()
-
-    """ def drawSolid(self, solid):
-        # Draw faces
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-        glColor3f(1, 1, 0.2)
-        glBegin(GL_TRIANGLES)
-        for triangle in solid.triangles:
-            for vertex in triangle.vertices:
-                glVertex3f(*vertex)
-        glEnd()
-
-        # Draw edges
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
-        glColor3f(0, 0, 0)
-        glBegin(GL_TRIANGLES)
-        for triangle in solid.triangles:
-            for vertex in triangle.vertices:
-                glVertex3f(*vertex)
-        glEnd() """
     
     def paintGL(self):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -93,9 +75,7 @@ class SimulationWidget(QOpenGLWidget):
         gluLookAt(*(list(self.cam_position) + list(self.cam_target) + list(self.cam_up_vector)))
 
 
-        #vertices=self.df.model.template_mesh.vertices[0].clone().detach().cpu().numpy()
-        vertices=self.df.pos
-        start=time.perf_counter()
+        vertices=self.df.simu_pos
         glColor3f(1.0,1.0,0.0)
         glBegin(GL_TRIANGLES)
         for face in self.faces:
@@ -117,7 +97,6 @@ class SimulationWidget(QOpenGLWidget):
             glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
         glEnd()
-        print('all time ',time.perf_counter()-start)
 
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
@@ -126,12 +105,6 @@ class SimulationWidget(QOpenGLWidget):
 
     def update_simulation(self):
         delta_time = 0.001  # Time step
-        """ for solid in self.solids:
-            self.cloth.handle_collisions_with_solid(solid) 
-        self.cloth.update_simulation(delta_time) """
-        """ for i in range(0,500):
-            self.df.step()
-            print('itertimes: ',i) """
         self.df.step()
         self.update()
         
@@ -187,13 +160,13 @@ class MainWindow(QMainWindow):
         # Move the camera depending on which key is pressed
         if event.key() == Qt.Key_Escape:
             self.close()
-        if event.key() == Qt.Key_Up:
+        if event.key() == Qt.Key_W:
             self.simulation_widget.cam_position += self.simulation_widget.move_speed * self.simulation_widget.cam_up_vector
-        elif event.key() == Qt.Key_Down:
+        elif event.key() == Qt.Key_S:
             self.simulation_widget.cam_position -= self.simulation_widget.move_speed * self.simulation_widget.cam_up_vector
-        elif event.key() == Qt.Key_Left:
+        elif event.key() == Qt.Key_A:
             self.simulation_widget.cam_position -= np.cross(self.simulation_widget.cam_target - self.simulation_widget.cam_position, self.simulation_widget.cam_up_vector) * self.simulation_widget.move_speed
-        elif event.key() == Qt.Key_Right:
+        elif event.key() == Qt.Key_D:
             self.simulation_widget.cam_position += np.cross(self.simulation_widget.cam_target - self.simulation_widget.cam_position, self.simulation_widget.cam_up_vector) * self.simulation_widget.move_speed
 
         self.simulation_widget.update()
