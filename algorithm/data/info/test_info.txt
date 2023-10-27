@@ -1,0 +1,22 @@
+1e-4 #small coef
+
+1e4  #stiffnesss                  unit: kg/(m * s^2)
+
+4.5  #mass of each vertice        unit: kg
+
+9.8  #gravitational acceleration  unit: m/s^2
+
+1e2  #maximum force on the rope   unit: N
+
+1.8  #minimum height of the tarp  unit: m
+
+2.45 #the height of the sticks    unit: m
+
+8    #maximum length of the rope  unit: m
+
+2    #the number of points that forced by a rope
+2    #the number of points that forced by a stick and a reprojection
+0
+3
+1
+2
