@@ -37,7 +37,7 @@ class tarp_info():
         #vertex that are forced
         self.C=torch.cat([self.C0,self.C1],dim=0)
         #vertically upward direction
-        n=np.zeros([batch_size,self.C1.size(0),3]).astype(np.float32)
+        n=np.zeros([batch_size,self.C.size(0),3]).astype(np.float32)
         n[:,:,2]=1.0
         self.n=torch.from_numpy(n).cuda()
         

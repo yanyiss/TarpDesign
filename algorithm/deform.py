@@ -1,3 +1,4 @@
+from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -75,13 +76,25 @@ class Model(nn.Module):
 
         self.tarp_info = TI.tarp_info(self.position,data)
 
-    def force_constraint(self,vertices,forces):
-        def logelp(self,x, elp=0.0):
-            if elp>0.0:
-                return torch.where(x<elp,-(x-elp)**2*torch.log(x/elp)/(elp**2),0.0)
-            else:
-                return torch.where(x<self.elp,-(x-self.elp)**2*torch.log(x/self.elp)/(self.elp**2),0.0)  
-        return 1e3*(forces**2).sum()
+    def force_loss(self,vertices):
+        def logelp(self,x,elp=0.0):
+            elp=max(elp,self.tarp_info.elp)
+            return torch.where(x<elp,-(x/elp-1.0)**2*torch.log(x/elp),0.0)
+        
+        #loss = 1e3*(forces**2).sum()
+        #force has a maximum
+        #F0value=torch.sqrt(torch.sum(f[:,0:self.C0.size(0),:]**2,dim=2))
+        #F1value=torch.sum(torch.cross(f[:,-self.C1.size(0):,:],self.n)**2,dim=2)
+        force_magnitude=torch.sum(self.force**2,dim=2)
+        force_n_projection=self.force[:,:,2]**2
+        loss=1e3*torch.sum(force_magnitude)
+        +logelp(self.tarp_info.Fmax**2-force_magnitude,1.0)
+        +logelp(0.9*force_magnitude-force_n_projection,1.0)
+        +logelp(force_n_projection-0.1*force_magnitude,1.0)
+
+    def get_srMesh(self):
+        return sr.Mesh(self.position,self.faces)
+
 
     def forward(self, batch_size,dt):
         
@@ -208,7 +221,18 @@ class Model(nn.Module):
 
 
 def shadow_area(image):
-    return torch.sum(image.abs())
+    return torch.sum(F.relu(image))
+
+class py_simulatin(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx,forces,simu_para):
+        vertices=0.0*forces*simu_para
+        return vertices
+    
+    @staticmethod
+    def backward(ctx,grad_vertices):
+        grad_forces=0.0*grad_vertices
+        return grad_forces,None
 
 class deform():
     def __init__(self):
@@ -231,19 +255,36 @@ class deform():
         #self.simu_pos=self.model.template_mesh.vertices[0].clone().detach().cpu().numpy()
         self.simu_pos=(self.model.position+self.model.pos_displace)[0].clone().detach().cpu().numpy()
 
-        self.pd=Simulation()
-        self.pd.set_info(self.model.template_mesh.faces[0].clone().detach().cpu().numpy(),
+        self.diffsimu=DiffSimulation()
+        self.diffsimu.set_info(self.model.template_mesh.faces[0].clone().detach().cpu().numpy(),
                          self.simu_pos.flatten(),
                          self.model.tarp_info.C.clone().detach().cpu().numpy(),
-                         self.model.tarp_info.k.clone().detach().cpu().numpy(),0.1,
-                         self.model.tarp_info.mass.clone().detach().cpu().numpy(),1647)
+                         self.model.tarp_info.k.clone().detach().cpu().numpy(),
+                         0.1,
+                         self.model.tarp_info.mass.clone().detach().cpu().numpy(),
+                         self.model.tarp_info.CI.clone().detach().cpu().numpy())
         
-
+        self.optimizer = torch.optim.Adamax(self.model.parameters(), 0.01)
+        self.nv=self.model.position.shape[1]
+        
     def set_init_force(self):
-        self.pd.set_forces(self.model.force[0].clone().detach().cpu().numpy().flatten())
+        self.diffsimu.set_forces(self.model.force[0].clone().detach().cpu().numpy().flatten())
     
     def step(self):
-        self.pd.Opt()
-        size=self.pd.v.size
-        self.simu_pos=self.pd.v.reshape(3506,3)
+        self.diffsimu.Opt()
+        size=self.diffsimu.v.size
+        self.simu_pos=self.diffsimu.v.reshape(self.nv,3)
+
+        """ loss=self.model(1,0.1)
+        loss.backward()
+        self.optimizer.step() """
+        #get gradient of shadow with respect to mesh
+        """ mesh=self.model.get_srMesh()
+        mesh=self.lighting(mesh)
+        mesh=self.transform(mesh)
+        now_image=self.rasterizer(mesh)
+        loss=shadow_area(now_image)
+        loss.backward() """
+
+
         #print(self.simu_pos)
