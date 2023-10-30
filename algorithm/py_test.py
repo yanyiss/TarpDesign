@@ -17,8 +17,12 @@ import soft_renderer as sr
 def main():
     #print(example.add([[4,5,6,7,7],[5,6,7,2,1]]))
     
-    x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,4.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]]))
+    x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,4.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
     print(x)
+
+    print((x[0].t().sum(dim=1)**2).sum())
+    print((x[0].sum(dim=1)**2).sum())
+    print(x.unsqueeze(dim=-1))
     
     c = np.array([[0,1,2],[1,3,2],[2,3,4],[1,3,2],[2,3,4]]).flatten()
     print(c.reshape(5,3))

@@ -4,7 +4,7 @@ import sys
 import time
 import numpy as np
 from PyQt5.QtCore import *
-from PyQt5.QtWidgets import QApplication, QMainWindow, QOpenGLWidget, QVBoxLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QOpenGLWidget, QVBoxLayout#, QWidget
 from PyQt5 import uic
 
 """ from Simulation.Cloth import Cloth
@@ -16,7 +16,8 @@ from Solids.Plane import Plane """
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-import algorithm.deform as deform
+#import algorithm.deform as deform
+import algorithm.opt as opt
 """ AXIS_DICT = {
     "X" : [1,0,0],
     "Y" : [0,1,0],
@@ -44,9 +45,12 @@ class SimulationWidget(QOpenGLWidget):
         self.point=np.array([0.0,0.0,0.0])
         #self.sign_one.connect(self.changecolor)
 
-        self.df=deform.deform()
+        """ self.df=deform.deform()
         self.faces=self.df.model.template_mesh.faces[0].clone().detach().cpu().numpy()
-        self.df.set_init_force()
+        self.df.set_init_force() """
+
+        self.opt=opt.deform()
+        self.faces=self.opt.tarp.faces[0].clone().detach().cpu().numpy()
 
     
     def mousePressEvent(self, event):
@@ -74,8 +78,9 @@ class SimulationWidget(QOpenGLWidget):
         glLoadIdentity()
         gluLookAt(*(list(self.cam_position) + list(self.cam_target) + list(self.cam_up_vector)))
 
-
-        vertices=self.df.simu_pos
+        start=time.perf_counter()
+        #vertices=self.df.simu_pos
+        vertices=self.opt.simu_pos
         glColor3f(1.0,1.0,0.0)
         glBegin(GL_TRIANGLES)
         for face in self.faces:
@@ -97,7 +102,27 @@ class SimulationWidget(QOpenGLWidget):
             glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
         glEnd()
-
+        
+        index0=self.opt.simu_index0
+        index1=self.opt.simu_index1
+        forces=self.opt.simu_force
+        id=0
+        glLineWidth(10)
+        glBegin(GL_LINES)
+        glColor3f(1.0,0.0,0.0)
+        for i in index0:
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
+            id=id+1
+        id=0
+        glColor3f(0.0,0.0,0.0)
+        for i in index1:
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices[i][0]-forces[id][0],vertices[i][1]-forces[id][1],vertices[i][2]-forces[id][2])
+            id=id+1
+        glEnd()
+        
+        print('render time: ',time.perf_counter()-start)
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
@@ -105,7 +130,8 @@ class SimulationWidget(QOpenGLWidget):
 
     def update_simulation(self):
         delta_time = 0.001  # Time step
-        self.df.step()
+        #self.df.step()
+        self.opt.one_iterate()
         self.update()
         
 

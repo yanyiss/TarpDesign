@@ -1,6 +1,6 @@
 1e-2 #small coef
 
-1e4  #stiffnesss                  unit: kg/(m * s^2)
+1e2  #stiffnesss                  unit: kg/(m * s^2)
 
 4.5  #mesh mass                   unit: kg
 

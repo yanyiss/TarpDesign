@@ -14,6 +14,8 @@ class tarp_info():
         self.k=torch.tensor(data[1]).cuda()
         #mass
         self.mass=torch.tensor(data[2]).cuda()
+        #gravity acceleration        unit: m/(s^2)
+        self.g=torch.tensor(data[3]).cuda()
         #gravity                     unit: N
         G=np.zeros([batch_size,self.nv,3]).astype(np.float32)
         G[:,:,2]=-data[2]*data[3]/self.nv
