@@ -34,8 +34,8 @@ class SimulationWidget(QOpenGLWidget):
         gluPerspective(45.0, self.width() / self.height(), 0.1, 100.0)
         
         # Camera properties
-        self.cam_position = np.array([0.0, 5.0, 5.0])
-        self.cam_target = np.array([0.0, 0.0, 2.45])
+        self.cam_position = np.array([0.0, -5.0, 5.0])
+        self.cam_target = np.array([0.0, 0.0, 3.45])
         self.cam_up_vector = np.array([0.0, 0.0, 1.0])
         
         self.rotate_speed = 0.01
@@ -105,22 +105,38 @@ class SimulationWidget(QOpenGLWidget):
         
         index0=self.opt.simu_index0
         index1=self.opt.simu_index1
-        forces=self.opt.simu_force
+        forces=self.opt.simu_force*0.03
         id=0
-        glLineWidth(10)
+        glLineWidth(4)
         glBegin(GL_LINES)
-        glColor3f(1.0,0.0,0.0)
+        glColor3f(1.0,0.0,1.0)
         for i in index0:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
             glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
             id=id+1
-        id=0
+        
         glColor3f(0.0,0.0,0.0)
         for i in index1:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
-            glVertex3f(vertices[i][0]-forces[id][0],vertices[i][1]-forces[id][1],vertices[i][2]-forces[id][2])
+            glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
             id=id+1
         glEnd()
+
+        #draw axis
+        glLineWidth(2)
+        glBegin(GL_LINES)
+        glColor3f(1.0,0.0,0.0)
+        glVertex3f(0.0,0.0,0.0)
+        glVertex3f(10.0,0.0,0.0)
+        glColor3f(0.0,1.0,0.0)
+        glVertex3f(0.0,0.0,0.0)
+        glVertex3f(0.0,10.0,0.0)
+        glColor3f(0.0,0.0,1.0)
+        glVertex3f(0.0,0.0,0.0)
+        glVertex3f(0.0,0.0,10.0)
+        glEnd()
+
+        
         
         print('render time: ',time.perf_counter()-start)
 
@@ -131,7 +147,8 @@ class SimulationWidget(QOpenGLWidget):
     def update_simulation(self):
         delta_time = 0.001  # Time step
         #self.df.step()
-        self.opt.one_iterate()
+        for i in range(0,10):
+            self.opt.one_iterate()
         self.update()
         
 

@@ -20,7 +20,10 @@ def main():
     x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,4.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
     print(x)
 
-    print((x[0].t().sum(dim=1)**2).sum())
+    y=torch.tensor([[[0,1,2]]]).cuda()
+    print(torch.cat([x,y],dim=1))
+
+    """ print((x[0].t().sum(dim=1)**2).sum())
     print((x[0].sum(dim=1)**2).sum())
     print(x.unsqueeze(dim=-1))
     
@@ -30,7 +33,7 @@ def main():
 
     i=torch.from_numpy(np.array([1,2,3])).cuda()
     j=torch.from_numpy(np.array([3,7,1,2])).cuda()
-    print(torch.cat([i,j],dim=0))
+    print(torch.cat([i,j],dim=0)) """
 
 
 if __name__ == '__main__':

@@ -18,13 +18,16 @@ from algorithm.pd_cpp import *
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
+VIEW_ANGLE=4
+BALANCE_COF=0.001
+LEARNING_RATE=0.003
 numerical_error=0
 
 class ExternalForce(nn.Module):
     def __init__(self,vertices,tarp_info):
         super(ExternalForce,self).__init__()
         batch_size=vertices.shape[0]
-        f=torch.zeros(batch_size,tarp_info.C.size(0),3).cuda()
+        f=torch.zeros(batch_size,tarp_info.C.size(0)-1,3).cuda()
         if False:
             C0_dir=vertices[:,tarp_info.C0,:]-vertices[:,tarp_info.CI,:]
             C0_dir=C0_dir/torch.sqrt(torch.sum(C0_dir**2,dim=2)).t().repeat(1,3)
@@ -35,10 +38,10 @@ class ExternalForce(nn.Module):
                              [ -70.0,   75.0,  -19.0 ],[  70.0,   71.0,  -19.0 ],
                              [   0.0,  100.0,  -19.0 ],[   0.0, -100.0,  -19.0 ],
                              [ 100.0,    0.0,   79.05],[-100.0,    0.0,   79.05]]]).cuda() """
-            f=torch.tensor([[[ -7.0,  -7.5,  -19.0  ],[   7.0,  -7.1,  -19.0 ],
-                             [ -7.0,   7.5,  -19.0  ],[   7.0,   7.1,  -19.0 ],
-                             [   0.0,  10.0,  -19.0 ],[   0.0, -10.0,  -19.0 ],
-                             [ 10.0,    0.0,   79.05],[-10.0,    0.0,   79.05]]]).cuda()
+            f=torch.tensor([[[ -7.0,  -7.5,  -9.0  ],[   7.0,  -7.1,  -9.0 ],
+                             [ -7.0,   7.5,  -9.0  ],[   7.0,   7.1,  -9.0 ],
+                             [   0.0,  10.0,  -9.0 ],[   0.0, -10.0,  -9.0 ],
+                             [ 10.0,    0.0,  49.05]]]).cuda()
         
         self.register_buffer("force",nn.Parameter(f))
         self.register_parameter("force_displace",nn.Parameter(torch.zeros_like(f)))
@@ -82,9 +85,23 @@ class py_simulatin(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx,grad_vertices):
+        print('grad_vertices')
+        print(grad_vertices[0][0])
+        print(grad_vertices[0][1])
+        print(grad_vertices[0][4])
+        print(grad_vertices[0][5])
+        print(grad_vertices[0][56])
+        print(grad_vertices[0][156])
+        print(grad_vertices[0][2])
+        print(grad_vertices[0][3])
         grad_vertices=grad_vertices.reshape(1,1,grad_vertices.size(1)*3)
         force_num=int(ctx.jacobi.size(2)/3)
         grad_forces=torch.bmm(grad_vertices,ctx.jacobi).reshape(1,force_num,3)
+        print('grad_forces',grad_forces)
+        print('jacobi')
+        for i in range(9,12):
+            for j in range(0,3):
+                print(i,j,ctx.jacobi[0][i][j])
         return grad_forces,None
     
 class Tarp():
@@ -101,7 +118,7 @@ class Tarp():
         return sr.Mesh(self.vertices.repeat(self.batch_size,1,1),self.faces.repeat(self.batch_size,1,1))
 
 def shadow_area(image):
-    return torch.sum(F.relu(image))
+    return torch.sum(image)
 
 class deform():
     def __init__(self):
@@ -116,7 +133,7 @@ class deform():
 
         #此处的投影需要改!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         #transform=sr.Look(camera_direction=np.array([0,0,1]),perspective=False, eye=np.array([0,0,0]))
-        self.transform=sr.LookAt(viewing_angle=3,eye=[0,0,-50])
+        self.transform=sr.LookAt(viewing_angle=VIEW_ANGLE,eye=[0,0,-50])
         self.lighting=sr.Lighting()
         self.rasterizer=sr.SoftRasterizer(image_size=128,sigma_val=1e-4,aggr_func_rgb='hard')
 
@@ -134,11 +151,28 @@ class deform():
                         )
         
         self.external_force=ExternalForce(self.tarp.vertices,self.tarp.tarp_info).cuda()
-        self.optimizer = torch.optim.Adamax(self.external_force.parameters(), 0.01)
+        self.optimizer = torch.optim.Adamax(self.external_force.parameters(), LEARNING_RATE)
+        self.writer = imageio.get_writer(os.path.join(self.args.output_dir, 'deform.gif'), mode='I')
 
         self.simu_index0=self.tarp.tarp_info.C0.clone().detach().cpu().numpy()
         self.simu_index1=self.tarp.tarp_info.C1.clone().detach().cpu().numpy()
-        self.simu_force=self.external_force.force[0].clone().detach().cpu().numpy()
+        self.itertimes=0
+        self.simu_force=0
+        self.set_all_forces()
+
+    def set_all_forces(self):
+        resultant_force_displace=-self.external_force.force_displace[0].t().sum(dim=1)
+        resultant_force_displace=torch.cat([self.external_force.force_displace[0],resultant_force_displace.unsqueeze(dim=0)],dim=0)
+        print(resultant_force_displace)
+
+
+        resultant_force=(self.external_force.force[0]+self.external_force.force_displace[0]).t().sum(dim=1)
+        resultant_force[0]=-resultant_force[0]
+        resultant_force[1]=-resultant_force[1]
+        resultant_force[2]=self.tarp.tarp_info.mass*self.tarp.tarp_info.g-resultant_force[2]
+        resultant_force=torch.cat([self.external_force.force[0],resultant_force.unsqueeze(dim=0)],dim=0)
+        #print(resultant_force)
+        self.simu_force=resultant_force.clone().detach().cpu().numpy()
         
     def iterate(self):
         for i in range(0,1000):
@@ -159,22 +193,29 @@ class deform():
         ps=py_simulatin.apply
         vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator)
         self.simu_pos=vertices[0].clone().detach().cpu().numpy()
-        if self.diffsimulator.print_balance_info()==False:
+        if self.diffsimulator.print_balance_info(BALANCE_COF)==False:
             return
 
-        print(self.external_force.force+self.external_force.force_displace)
+        """ print(self.external_force.force_displace)
+        print(-self.external_force.force_displace[0].t().sum(dim=1)) """
         self.tarp.vertices=vertices
         mesh=self.tarp.get_render_mesh()
         mesh=self.lighting(mesh)
         mesh=self.transform(mesh)
         shadow_image=self.rasterizer(mesh)
 
+        image=shadow_image.detach().cpu().numpy()[0].transpose((1,2,0))
+        #print('image',image)
+        #print(image[64][64])
+        if self.itertimes%10==0:
+            imageio.imsave(os.path.join(self.args.output_dir,'deform_%05d.png'%self.itertimes),(255*image[...,-1]).astype(np.uint8))
+        self.itertimes=self.itertimes+1
+
         loss=-shadow_area(shadow_image)
-        print(loss)
-        loss=loss+self.external_force()
         print(loss)
         loss.backward()
 
         self.optimizer.step()
-        self.simu_force=(self.external_force.force+self.external_force.force_displace)[0].clone().detach().cpu().numpy()
+        self.set_all_forces()
+
 
