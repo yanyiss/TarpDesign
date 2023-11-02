@@ -18,10 +18,12 @@ from algorithm.pd_cpp import *
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
-VIEW_ANGLE=4
-BALANCE_COF=0.001
-LEARNING_RATE=0.003
+VIEW_ANGLE=4  
+BALANCE_COF=0.01
+LEARNING_RATE=0.1
 numerical_error=0
+
+simu_grad_vertices=0
 
 class ExternalForce(nn.Module):
     def __init__(self,vertices,tarp_info):
@@ -34,14 +36,19 @@ class ExternalForce(nn.Module):
             C1_dir=vertices[:,tarp_info.C1,:]-vertices[:,tarp_info.CI,:]
             C1_dir=C1_dir/torch.sqrt(torch.sum(C1_dir**2,dim=2)).t().repeat(1,3)
         else:
-            """ f=torch.tensor([[[ -70.0,  -75.0,  -19.0 ],[  70.0,  -71.0,  -19.0 ],
-                             [ -70.0,   75.0,  -19.0 ],[  70.0,   71.0,  -19.0 ],
-                             [   0.0,  100.0,  -19.0 ],[   0.0, -100.0,  -19.0 ],
-                             [ 100.0,    0.0,   79.05],[-100.0,    0.0,   79.05]]]).cuda() """
+            """ f=torch.tensor([[[ -7.0,  -7.50,  -9.0 ],[  7.0,  -7.10,  -9.0 ],
+                             [ -7.0,   7.50,  -9.0 ],[  7.0,   7.10,  -9.0 ],
+                             [   0.0,  10.0,  -9.0 ],[   0.0, -10.0,  -9.0 ],
+                             [ 10.0,    0.0,   49.05],[-10.0,    0.0,   49.05]]]).cuda() """
             f=torch.tensor([[[ -7.0,  -7.5,  -9.0  ],[   7.0,  -7.1,  -9.0 ],
                              [ -7.0,   7.5,  -9.0  ],[   7.0,   7.1,  -9.0 ],
                              [   0.0,  10.0,  -9.0 ],[   0.0, -10.0,  -9.0 ],
                              [ 10.0,    0.0,  49.05]]]).cuda()
+            """ f=torch.tensor([[[ -7.0,  -7.5,  -9.0  ],[   7.0,  -7.1,  -9.0 ],
+                             [ 7.0,   7.5,  -9.0   ],[   -7.0,   7.1,  -9.0 ],
+                             [ -10.0,    0.0,  40.05]]]).cuda() """
+            """ f=torch.tensor([[[ -7.00,  -7.00,  -9.0  ],[   7.0,  7.0,  -9.0 ],
+                             [ -7.0,   7.0,  31.05   ]]]).cuda() """
         
         self.register_buffer("force",nn.Parameter(f))
         self.register_parameter("force_displace",nn.Parameter(torch.zeros_like(f)))
@@ -57,11 +64,23 @@ class ExternalForce(nn.Module):
     #return force constraint energy
     #reference: Incremental Potential Contact: Intersection- and Inversion-free, Large-Deformation Dynamics
     def forward(self):
-        resultant_force=self.force+self.force_displace#+torch.tensor([[[0.0,0.0,-self.tarp_info.mass*self.tarp_info.g]]]).cuda()
+        resultant_force=(self.force[0]+self.force_displace[0]).t().sum(dim=1)
+        resultant_force[0]=-resultant_force[0]
+        resultant_force[1]=-resultant_force[1]
+        resultant_force[2]=self.tarp_info.mass*self.tarp_info.g-resultant_force[2]
+        resultant_force=torch.cat([self.force[0]+self.force_displace[0],resultant_force.unsqueeze(dim=0)],dim=0)
+        print((resultant_force**2).sum(dim=1))
+        return torch.exp((resultant_force**2).sum(dim=1)-self.tarp_info.Fmax**2).sum()*1e2
+
+        """ current_force=self.force+self.force_displace
+        (current_force**2).sum(dim=2) """
+        """ print('force num:',(self.force_displace[0].t().sum(dim=1)**2).sum())
+        return 1e4*(self.force_displace[0].t().sum(dim=1)**2).sum() """
+        """ resultant_force=self.force+self.force_displace#+torch.tensor([[[0.0,0.0,-self.tarp_info.mass*self.tarp_info.g]]]).cuda()
         resultant_force[0,0,2]=resultant_force[0,0,2]-self.tarp_info.mass*self.tarp_info.g
         resultant_force_mag=resultant_force[0].t().sum(dim=1)
         print('resultant force magnitude: ',resultant_force_mag)
-        return 1e4*(resultant_force_mag**2).sum()
+        return 1e4*(resultant_force_mag**2).sum() """
         """ resultant_force=self.force+self.force_displace+torch.tensor([0.0,0.0,-self.tarp_info.mass*self.tarp_info.g])
         force_magnitude=torch.sum(force**2,dim=2)
         force_n_projection=force[:,:,2]**2
@@ -76,8 +95,6 @@ class py_simulatin(torch.autograd.Function):
         diff_simulator.set_forces(forces[0].clone().detach().cpu().numpy().flatten())
         diff_simulator.Opt()
         diff_simulator.compute_jacobi()
-        #jacobi=torch.from_numpy(diff_simulator.jacobi)
-        #ctx.save_for_backward(jacobi)
         ctx.jacobi=torch.from_numpy(diff_simulator.jacobi.astype(np.float32)).unsqueeze(dim=0).cuda()
         v_size=int(diff_simulator.v.size/3)
         vertices=diff_simulator.v.reshape(v_size,3).astype(np.float32)
@@ -85,7 +102,7 @@ class py_simulatin(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx,grad_vertices):
-        print('grad_vertices')
+        """ print('grad_vertices')
         print(grad_vertices[0][0])
         print(grad_vertices[0][1])
         print(grad_vertices[0][4])
@@ -93,15 +110,25 @@ class py_simulatin(torch.autograd.Function):
         print(grad_vertices[0][56])
         print(grad_vertices[0][156])
         print(grad_vertices[0][2])
+        print(grad_vertices[0][3]) """
+        """ print('grad_vertices')
+        print(grad_vertices[0][0])
+        print(grad_vertices[0][1])
+        print(grad_vertices[0][2])
         print(grad_vertices[0][3])
+        print(grad_vertices[0][4])
+        print(grad_vertices[0][5])
+        print(grad_vertices[0][6]) """
+        simu_grad_vertices=grad_vertices[0].clone().detach().cpu().numpy()
         grad_vertices=grad_vertices.reshape(1,1,grad_vertices.size(1)*3)
         force_num=int(ctx.jacobi.size(2)/3)
         grad_forces=torch.bmm(grad_vertices,ctx.jacobi).reshape(1,force_num,3)
-        print('grad_forces',grad_forces)
-        print('jacobi')
+        """ print('grad_forces')
+        print(grad_forces) """
+        """ print('jacobi')
         for i in range(9,12):
             for j in range(0,3):
-                print(i,j,ctx.jacobi[0][i][j])
+                print(i,j,ctx.jacobi[0][i][j]) """
         return grad_forces,None
     
 class Tarp():
@@ -156,6 +183,7 @@ class deform():
 
         self.simu_index0=self.tarp.tarp_info.C0.clone().detach().cpu().numpy()
         self.simu_index1=self.tarp.tarp_info.C1.clone().detach().cpu().numpy()
+        self.simu_jacobi=0
         self.itertimes=0
         self.simu_force=0
         self.set_all_forces()
@@ -163,14 +191,14 @@ class deform():
     def set_all_forces(self):
         resultant_force_displace=-self.external_force.force_displace[0].t().sum(dim=1)
         resultant_force_displace=torch.cat([self.external_force.force_displace[0],resultant_force_displace.unsqueeze(dim=0)],dim=0)
-        print(resultant_force_displace)
+        #print(resultant_force_displace)
 
 
         resultant_force=(self.external_force.force[0]+self.external_force.force_displace[0]).t().sum(dim=1)
         resultant_force[0]=-resultant_force[0]
         resultant_force[1]=-resultant_force[1]
         resultant_force[2]=self.tarp.tarp_info.mass*self.tarp.tarp_info.g-resultant_force[2]
-        resultant_force=torch.cat([self.external_force.force[0],resultant_force.unsqueeze(dim=0)],dim=0)
+        resultant_force=torch.cat([self.external_force.force[0]+self.external_force.force_displace[0],resultant_force.unsqueeze(dim=0)],dim=0)
         #print(resultant_force)
         self.simu_force=resultant_force.clone().detach().cpu().numpy()
         
@@ -211,11 +239,17 @@ class deform():
             imageio.imsave(os.path.join(self.args.output_dir,'deform_%05d.png'%self.itertimes),(255*image[...,-1]).astype(np.uint8))
         self.itertimes=self.itertimes+1
 
-        loss=-shadow_area(shadow_image)
+        loss=-shadow_area(shadow_image)+self.external_force()
         print(loss)
         loss.backward()
 
+        fe=self.diffsimulator.leftmat
+
+        self.simu_jacobi=self.diffsimulator.jacobi.astype(np.float32)
+        
         self.optimizer.step()
         self.set_all_forces()
+        
+        #self.simu_force=(self.external_force.force+self.external_force.force_displace)[0].clone().detach().cpu().numpy()
 
 

@@ -1,12 +1,12 @@
 1e-2 #small coef
 
-5e3  #stiffnesss                  unit: kg/(m * s^2)
+1e1  #stiffnesss                  unit: kg/(m * s^2)
 
 4.5  #mesh mass                   unit: kg
 
 9.8  #gravitational acceleration  unit: m/s^2
 
-3e2  #maximum force on the rope   unit: N
+1e2  #maximum force on the rope   unit: N
 
 1.8  #minimum height of the tarp  unit: m
 
@@ -14,13 +14,11 @@
 
 8    #maximum length of the rope  unit: m
 
-6    #center of the plane mesh
+4    #center of the plane mesh
 
-4    #the number of points that forced by a rope
+2    #the number of points that forced by a rope
 2    #the number of points that forced by a stick and a reprojection
 0
 1
 2
 3
-4
-5

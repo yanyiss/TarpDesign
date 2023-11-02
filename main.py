@@ -136,9 +136,25 @@ class SimulationWidget(QOpenGLWidget):
         glVertex3f(0.0,0.0,10.0)
         glEnd()
 
+        #draw gradient
+        """ [[[ 3.8598e+01, 3.8598e+01, -2.2346e+01],
+         [ 3.5449e+01, -3.6071e+01, -2.2346e+01],
+         [ 7.4046e+01, -7.4047e+01, -3.2783e-07]]]
+        aa=np.array([[63.6873, -25.2530, -35.2786],
+         [ 26.2211, -66.0470, -34.9843],
+         [ 89.6475, -90.1260,  -0.1145]])*0.01
+        glLineWidth(10)
+        glBegin(GL_LINES)
+        glColor3f(0.1,0.3,0.7)
+        glVertex3f(vertices[0][0],vertices[0][1],vertices[0][2])
+        glVertex3f(vertices[0][0]+aa[0][0],vertices[0][1]+aa[0][1],vertices[0][2]+aa[0][2])
+        glVertex3f(vertices[1][0],vertices[1][1],vertices[1][2])
+        glVertex3f(vertices[1][0]+aa[1][0],vertices[1][1]+aa[1][1],vertices[1][2]+aa[1][2])
+        glVertex3f(vertices[2][0],vertices[2][1],vertices[2][2])
+        glVertex3f(vertices[2][0]+aa[2][0],vertices[2][1]+aa[2][1],vertices[2][2]+aa[2][2])
+        glEnd() """
         
-        
-        print('render time: ',time.perf_counter()-start)
+        #print('render time: ',time.perf_counter()-start)
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
