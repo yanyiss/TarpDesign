@@ -21,9 +21,12 @@ data_dir = os.path.join(current_dir, 'data')
 
 IMAGE_SIZE=128
 VIEW_ANGLE=4  
-BALANCE_COF=0.01
-LEARNING_RATE=0.001
-MAX_ITER=25000
+VIEW_SCALE=0.25
+BALANCE_COF=0.001
+LEARNING_RATE=0.01
+STEP_SIZE=100
+DECAY_GAMMA=0.96
+MAX_ITER=20000
 numerical_error=1e-4
 
 figure_x=[]
@@ -47,10 +50,10 @@ class ExternalForce(nn.Module):
                              [ -7.0,   7.50,  -9.0 ],[  7.0,   7.10,  -9.0 ],
                              [   0.0,  10.0,  -9.0 ],[   0.0, -10.0,  -9.0 ],
                              [ 10.0,    0.0,   49.05],[-10.0,    0.0,   49.05]]]).cuda() """
-            f=torch.tensor([[[ -27.0,  -27.50,  -19.0 ],[  27.0,  -27.50,  -19.0 ],
-                             [ -27.0,   27.50,  -19.0 ],[  27.0,   27.50,  -19.0 ],
+            f=torch.tensor([[[ -17.0,  -17.50,  -19.0 ],[  17.0,  -17.50,  -19.0 ],
+                             [ -17.0,   17.50,  -19.0 ],[  17.0,   17.50,  -19.0 ],
                              [   0.0,  30.0,  -19.0 ],[   0.0, -30.0,  -19.0 ],
-                             [ 30.0,    0.0,   79.05],[-30.0,    0.0,   79.05]]]).cuda() 
+                             [ 20.0,    0.0,   79.05],[-20.0,    0.0,   79.05]]]).cuda() 
             """ f=torch.tensor([[[ -7.0,  -7.5,  -9.0  ],[   7.0,  -7.1,  -9.0 ],
                              [ -7.0,   7.5,  -9.0  ],[   7.0,   7.1,  -9.0 ],
                              [   0.0,  10.0,  -9.0 ],[   0.0, -10.0,  -9.0 ],
@@ -75,9 +78,6 @@ class ExternalForce(nn.Module):
     def logelp(self,x,elp=0.0):
         elp=max(elp,self.elp)
         return torch.where(x<elp,-(x/elp-1.0)**2*torch.log(x/elp),0.0)
-    
-    def FEquivalence(self,force):
-        return (force[0].t().sum(dim=1)**2).sum()
     
     def FConstraint(self,force):
         f2=(force**2).sum(dim=2)
@@ -147,15 +147,17 @@ class ExternalForce(nn.Module):
     def forward(self):
         #self.force_last2_displace=self.force_last_displace.clone().detach()
         self.force_last_displace=self.force_displace.clone().detach()
-        return self.FConstraint(self.force+self.force_displace)*1e-3\
-               +self.FEquivalence(self.force_displace)
+        return self.FConstraint(self.force+self.force_displace)*1e-3
 
 class py_simulatin(torch.autograd.Function):
     @staticmethod
-    def forward(ctx,forces,diff_simulator,flag):
+    def forward(ctx,forces,diff_simulator,flag,newton_flag):
         diff_simulator.set_forces(forces[0].clone().detach().cpu().numpy().flatten())
         if flag:
-            diff_simulator.Opt()
+            if newton_flag:
+                diff_simulator.newton()
+            else:
+                diff_simulator.Opt()
         else:
             diff_simulator.compute_jacobi()
         ctx.jacobi=torch.from_numpy(diff_simulator.jacobi.astype(np.float32)).unsqueeze(dim=0).cuda()
@@ -165,11 +167,10 @@ class py_simulatin(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx,grad_vertices):
-        simu_grad_vertices=grad_vertices[0].clone().detach().cpu().numpy()
         grad_vertices=grad_vertices.reshape(1,1,grad_vertices.size(1)*3)
         force_num=int(ctx.jacobi.size(2)/3)
         grad_forces=torch.bmm(grad_vertices,ctx.jacobi).reshape(1,force_num,3)
-        return grad_forces,None,None
+        return grad_forces,None,None,None
     
 class Tarp():
     def __init__(self,args):
@@ -199,8 +200,8 @@ class deform():
         os.makedirs(self.args.output_dir, exist_ok=True)
 
         #此处的投影需要改!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        #transform=sr.Look(camera_direction=np.array([0,0,1]),perspective=False, eye=np.array([0,0,0]))
-        self.transform=sr.LookAt(viewing_angle=VIEW_ANGLE,eye=[0,0,-50])
+        self.transform=sr.LookAt(perspective=False,viewing_scale=VIEW_SCALE,eye=[0,0,-1.0])
+        #self.transform=sr.LookAt(viewing_angle=VIEW_ANGLE,eye=[0,0,-50])
         self.lighting=sr.Lighting()
         self.rasterizer=sr.SoftRasterizer(image_size=IMAGE_SIZE,sigma_val=1e-4,aggr_func_rgb='hard')
 
@@ -216,10 +217,12 @@ class deform():
                         self.tarp.tarp_info.mass.clone().detach().cpu().numpy(),
                         self.tarp.tarp_info.CI.clone().detach().cpu().numpy()
                         )
+        self.pd_step=0
+        self.small_gradient=False
         
         self.external_force=ExternalForce(self.tarp.vertices,self.tarp.tarp_info).cuda()
         self.optimizer = torch.optim.Adam(self.external_force.parameters(), lr=LEARNING_RATE)
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=50,gamma=0.99)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=STEP_SIZE,gamma=DECAY_GAMMA)
         """ lr_list=[]
         for epoch in range(MAX_ITER):
             if (epoch % 100) == 0:        
@@ -270,12 +273,21 @@ class deform():
 
     def one_iterate(self):
         ps=py_simulatin.apply
-        vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator,True)
+        self.pd_step=self.pd_step+1
+        vertices=0
+        """ if(self.pd_step>15):
+            vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator,True,True)
+        else:
+            vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator,True,False) """
+        vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator,True,False)
+
+            
         self.simu_pos=vertices[0].clone().detach().cpu().numpy()
         if self.diffsimulator.print_balance_info(BALANCE_COF)==False:
             return
         
-        vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator,False)
+        self.pd_step=0
+        vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator,False,False)
 
         """ print(self.external_force.force_displace)
         print(-self.external_force.force_displace[0].t().sum(dim=1)) """
@@ -325,6 +337,10 @@ class deform():
         #self.set_all_forces()
         self.external_force.linesearch()
         self.simu_force=(self.external_force.force+self.external_force.force_displace)[0].clone().detach().cpu().numpy()
+
+        delta=(self.external_force.force_displace-self.external_force.force_last_displace).clone().detach().cpu().numpy()
+        if (delta**2).sum()<1.0e-8:
+            self.small_gradient=True
         
 
 

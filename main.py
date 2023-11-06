@@ -190,6 +190,8 @@ class SimulationWidget(QOpenGLWidget):
         step=20
         if self.opt.itertimes>opt.MAX_ITER-step:
             return
+        if self.opt.small_gradient:
+            return
         for i in range(0,step):
             self.opt.one_iterate()
         self.update()
