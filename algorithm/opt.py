@@ -25,9 +25,10 @@ VIEW_SCALE=0.25
 BALANCE_COF=0.001
 LEARNING_RATE=0.01
 STEP_SIZE=100
-DECAY_GAMMA=0.96
+DECAY_GAMMA=0.98
 MAX_ITER=20000
 numerical_error=1e-4
+gradient_error=1e-7
 
 figure_x=[]
 figure_barrierloss=[]
@@ -36,34 +37,24 @@ figure_loss=[]
 plt.ion()
 
 class ExternalForce(nn.Module):
-    def __init__(self,vertices,tarp_info):
+    def __init__(self,vertices,tarp_info,boundary_index):
         super(ExternalForce,self).__init__()
         batch_size=vertices.shape[0]
-        f=torch.zeros(batch_size,tarp_info.C.size(0)-1,3).cuda()
+        f=torch.zeros(batch_size,tarp_info.C.size(0)-1,3).cuda().double()
         if False:
             C0_dir=vertices[:,tarp_info.C0,:]-vertices[:,tarp_info.CI,:]
             C0_dir=C0_dir/torch.sqrt(torch.sum(C0_dir**2,dim=2)).t().repeat(1,3)
             C1_dir=vertices[:,tarp_info.C1,:]-vertices[:,tarp_info.CI,:]
             C1_dir=C1_dir/torch.sqrt(torch.sum(C1_dir**2,dim=2)).t().repeat(1,3)
         else:
-            """ f=torch.tensor([[[ -7.0,  -7.50,  -9.0 ],[  7.0,  -7.10,  -9.0 ],
-                             [ -7.0,   7.50,  -9.0 ],[  7.0,   7.10,  -9.0 ],
-                             [   0.0,  10.0,  -9.0 ],[   0.0, -10.0,  -9.0 ],
-                             [ 10.0,    0.0,   49.05],[-10.0,    0.0,   49.05]]]).cuda() """
             f=torch.tensor([[[ -17.0,  -17.50,  -19.0 ],[  17.0,  -17.50,  -19.0 ],
                              [ -17.0,   17.50,  -19.0 ],[  17.0,   17.50,  -19.0 ],
                              [   0.0,  30.0,  -19.0 ],[   0.0, -30.0,  -19.0 ],
-                             [ 20.0,    0.0,   79.05],[-20.0,    0.0,   79.05]]]).cuda() 
-            """ f=torch.tensor([[[ -7.0,  -7.5,  -9.0  ],[   7.0,  -7.1,  -9.0 ],
-                             [ -7.0,   7.5,  -9.0  ],[   7.0,   7.1,  -9.0 ],
-                             [   0.0,  10.0,  -9.0 ],[   0.0, -10.0,  -9.0 ],
-                             [ 10.0,    0.0,  49.05]]]).cuda() """
-            """ f=torch.tensor([[[ -7.0,  -7.5,  -9.0  ],[   7.0,  -7.1,  -9.0 ],
-                             [ 7.0,   7.5,  -9.0   ],[   -7.0,   7.1,  -9.0 ],
-                             [ -10.0,    0.0,  40.05]]]).cuda() """
-            """ f=torch.tensor([[[ -7.00,  -7.00,  -9.0  ],[   7.0,  7.0,  -9.0 ],
-                             [ -7.0,   7.0,  31.05   ]]]).cuda() """
+                             [ 20.0,    0.0,   79.05],[-20.0,    0.0,   79.05]]]).cuda().double()
         
+
+        """ self.boundary_index=torch.tensor(boundary_index).cuda()
+        f=self.get_init_force(vertices,tarp_info,boundary_index) """
         self.register_buffer("force",nn.Parameter(f))
         self.register_parameter("force_displace",nn.Parameter(torch.zeros_like(f)))
         self.register_buffer("force_last_displace",nn.Parameter(torch.zeros_like(f)))
@@ -75,6 +66,14 @@ class ExternalForce(nn.Module):
         self.dtheta=0.02
         self.dF=2.0
     
+    def get_init_force(self,vertices,tarp_info,boundary_index):
+        batch_size=vertices.shape[0]
+        f=torch.zeros(batch_size,boundary_index.size,3).cuda().double()
+        average_weight=tarp_info.mass*tarp_info.g/boundary_index.size
+        f[:,:,2]=average_weight
+        return f
+        
+
     def logelp(self,x,elp=0.0):
         elp=max(elp,self.elp)
         return torch.where(x<elp,-(x/elp-1.0)**2*torch.log(x/elp),0.0)
@@ -104,37 +103,17 @@ class ExternalForce(nn.Module):
                 if deltaforce.norm()<1e-9:
                     deltaforce=0.0*deltaforce
                     break
-            """ if deltaforce.norm()<1e-6:
-                break """
-
-            """ F2a=torch.sum((self.force+self.force_last2_displace)[0]**2,dim=1)
-            F2b=torch.sum((self.force+self.force_last_displace)[0]**2,dim=1)
-            F2c=torch.sum((self.force+self.force_displace)[0]**2,dim=1)
-            print((self.tarp_info.Fmax**2)<(F2a*(1.0+numerical_error)))
-            print((self.tarp_info.Fmax**2)<(F2b*(1.0+numerical_error)))
-            print((self.tarp_info.Fmax**2)<(F2c*(1.0+numerical_error))) """
 
             #F2=torch.sum((self.force[0]+self.force_last_displace[0]+deltaforce[0])**2,dim=1)
             f2=((self.force+self.force_last_displace+deltaforce)**2).sum(dim=2)
             ForceMaxCondition=((self.tarp_info.Fmax**2)<(f2*(1.0+numerical_error)))
-            """ print(F2)
-            print(ForceMaxCondition) """
             if ForceMaxCondition.sum()!=0:
                 deltaforce=0.5*deltaforce
                 continue
 
-            """ Fz2a=torch.tensor((self.force[0,:,2]+self.force_last2_displace[0,:,2])**2)
-            Fz2b=torch.tensor((self.force[0,:,2]+self.force_last2_displace[0,:,2])**2)
-            Fz2c=torch.tensor((self.force[0,:,2]+self.force_displace[0,:,2])**2)
-            print((Fz2a/F2a)<(self.theta2*(1.0+numerical_error)))
-            print((Fz2b/F2b)<(self.theta2*(1.0+numerical_error)))
-            print((Fz2c/F2c)<(self.theta2*(1.0+numerical_error))) """
-
             #Fz2=torch.tensor((self.force[0,:,2]+self.force_last_displace[0,:,2]+deltaforce[0,:,2])**2)
             fz2=(self.force+self.force_last_displace+deltaforce)[:,:,2]**2
             ForceDirCondition=((fz2/f2)<(self.theta2*(1.0+numerical_error)))
-            """ print(Fz2)
-            print(ForceDirCondition) """
             if ForceDirCondition.sum()!=0:
                 deltaforce=0.5*deltaforce
                 continue
@@ -179,7 +158,7 @@ class Tarp():
         self.vertices=template_mesh.vertices
         self.faces=template_mesh.faces
 
-        data=np.loadtxt(args.info_path,dtype=np.float32)
+        data=np.loadtxt(args.info_path,dtype=np.float64)
         self.tarp_info=TI.tarp_info(self.vertices,data)
 
     def get_render_mesh(self):
@@ -192,6 +171,7 @@ class deform():
     def __init__(self):
         parser = argparse.ArgumentParser()
         parser.add_argument('-t', '--template-mesh', type=str, default=os.path.join(data_dir, 'obj/hex06.obj'))
+        parser.add_argument('-i', '--image',     type=str,default=os.path.join(data_dir, 'image/pentagram.png'))
         parser.add_argument('-p', '--info-path', type=str, default=os.path.join(data_dir,'info/hex_info06.txt'))
         parser.add_argument('-o', '--output-dir', type=str, default=os.path.join(data_dir, 'results'))
         parser.add_argument('-b', '--batch-size', type=int, default=1)
@@ -202,7 +182,7 @@ class deform():
         #此处的投影需要改!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         self.transform=sr.LookAt(perspective=False,viewing_scale=VIEW_SCALE,eye=[0,0,-1.0])
         #self.transform=sr.LookAt(viewing_angle=VIEW_ANGLE,eye=[0,0,-50])
-        self.lighting=sr.Lighting()
+        self.lighting=sr.Lighting(directions=[0,0,1])
         self.rasterizer=sr.SoftRasterizer(image_size=IMAGE_SIZE,sigma_val=1e-4,aggr_func_rgb='hard')
 
         self.tarp = Tarp(self.args)
@@ -219,19 +199,12 @@ class deform():
                         )
         self.pd_step=0
         self.small_gradient=False
+
+        boundary_index=TI.get_mesh_boundary(self.args.template_mesh)
         
-        self.external_force=ExternalForce(self.tarp.vertices,self.tarp.tarp_info).cuda()
+        self.external_force=ExternalForce(self.tarp.vertices,self.tarp.tarp_info,boundary_index).cuda()
         self.optimizer = torch.optim.Adam(self.external_force.parameters(), lr=LEARNING_RATE)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=STEP_SIZE,gamma=DECAY_GAMMA)
-        """ lr_list=[]
-        for epoch in range(MAX_ITER):
-            if (epoch % 100) == 0:        
-                for params in self.optimizer.param_groups:   
-                    params['lr'] *= 0.99 """
-            
-            #lr_list.append(self.optimizer.state_dict()['param_groups'][0]['lr'])
-        #plt.plot(range(20),lr_list[0:20],color = 'r')
-
 
         self.writer = imageio.get_writer(os.path.join(self.args.output_dir, 'deform.gif'), mode='I')
 
@@ -241,6 +214,16 @@ class deform():
         self.itertimes=0
         self.simu_force=0
         self.set_all_forces()
+
+        self.target_image = imageio.imread(self.args.image).astype('float32') / 255.
+        self.target_image=torch.from_numpy(self.target_image.transpose(2,0,1)).cuda().unsqueeze(dim=0)
+        """ self.target_image = imageio.imread(self.args.image).astype('float32') / 255.
+        save_image=np.zeros([1,128,128,4])
+        save_image[0,:,:,0]=np.where(self.target_image[:,:]>0.0000001,0.5,0.0)
+        save_image[0,:,:,1]=np.where(self.target_image[:,:]>0.0000001,0.5,0.0)
+        save_image[0,:,:,2]=np.where(self.target_image[:,:]>0.0000001,0.5,0.0)
+        save_image[0,:,:,3]=np.where(self.target_image[:,:]>0.0000001,1.0,0.0)
+        imageio.imsave(os.path.join(self.args.output_dir,'pentagram.png'),(255*save_image[0]).astype(np.uint8)) """
 
     def set_all_forces(self):
         resultant_force_displace=-self.external_force.force_displace[0].t().sum(dim=1)
@@ -255,23 +238,9 @@ class deform():
         resultant_force=torch.cat([self.external_force.force[0]+self.external_force.force_displace[0],resultant_force.unsqueeze(dim=0)],dim=0)
         #print(resultant_force)
         self.simu_force=resultant_force.clone().detach().cpu().numpy()
-        
-    def iterate(self):
-        for i in range(0,1000):
-            ps=py_simulatin.apply
-            vertices=ps(self.external_force.force+self.external_force.force_displace,self.diffsimulator)
-            self.tarp.vertices=vertices
-            mesh=self.tarp.get_render_mesh()
-            mesh=self.lighting(mesh)
-            mesh=self.transform(mesh)
-            shadow_image=self.rasterizer(mesh)
-
-            loss=-shadow_area(shadow_image)
-            loss.backward()
-
-            self.optimizer.step()
-
+       
     def one_iterate(self):
+
         ps=py_simulatin.apply
         self.pd_step=self.pd_step+1
         vertices=0
@@ -297,16 +266,25 @@ class deform():
         mesh=self.transform(mesh)
         shadow_image=self.rasterizer(mesh)
 
+
+
+
         image=shadow_image.detach().cpu().numpy()[0].transpose((1,2,0))
-        #print('image',image)
-        #print(image[64][64])
-        if self.itertimes%500==0:
-            imageio.imsave(os.path.join(self.args.output_dir,'deform_%05d.png'%self.itertimes),(255*image[...,-1]).astype(np.uint8))
+        """ print('image',image)
+        print(image[64][64]) """
+
+        if self.itertimes==0:
+            imageio.imsave(os.path.join(self.args.output_dir,'init.png'),(255*image).astype(np.uint8))
+        if self.itertimes%100==0:
+            imageio.imsave(os.path.join(self.args.output_dir,'deform_%05d.png'%self.itertimes),(255*image).astype(np.uint8))
+        #for i in range(10):
+        #self.writer.append_data((255*image).astype(np.uint8))
         self.itertimes=self.itertimes+1
 
 
         barrier_loss=self.external_force()
-        shadow_loss=-shadow_area(shadow_image)/(IMAGE_SIZE*IMAGE_SIZE)
+        #shadow_loss=-shadow_area(shadow_image)/(IMAGE_SIZE*IMAGE_SIZE)
+        shadow_loss=((shadow_image-self.target_image)**2).sum()/(IMAGE_SIZE*IMAGE_SIZE)
         loss=barrier_loss+shadow_loss
 
         figure_x.append(self.itertimes)
@@ -339,7 +317,7 @@ class deform():
         self.simu_force=(self.external_force.force+self.external_force.force_displace)[0].clone().detach().cpu().numpy()
 
         delta=(self.external_force.force_displace-self.external_force.force_last_displace).clone().detach().cpu().numpy()
-        if (delta**2).sum()<1.0e-8:
+        if (delta**2).sum()<gradient_error:
             self.small_gradient=True
         
 

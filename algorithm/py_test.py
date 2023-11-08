@@ -20,8 +20,9 @@ def main():
     x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,4.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
     print(x)
 
-    y=torch.tensor([[[0,1,2]]]).cuda()
-    print(torch.cat([x,y],dim=1))
+    f=torch.zeros(1,x.size(0),3).cuda().double()
+    print(f)
+
 
     """ print((x[0].t().sum(dim=1)**2).sum())
     print((x[0].sum(dim=1)**2).sum())

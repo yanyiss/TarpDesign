@@ -87,9 +87,9 @@ class SimulationWidget(QOpenGLWidget):
         for face in self.faces:
             #for v in faces:
              #   glVertex3f(vertices[v][0],vertices[v][1],vertices[v][2])
-            glVertex3f(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
-            glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
-            glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
+            glVertex3d(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
+            glVertex3d(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
+            glVertex3d(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
         glEnd()
 
         glColor3f(0.0,0.0,0.0)
