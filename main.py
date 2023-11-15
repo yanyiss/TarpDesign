@@ -103,48 +103,74 @@ class SimulationWidget(QOpenGLWidget):
             glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
         glEnd()
+
+        vertices_end=self.opt.simu_vertices_grad*1000+vertices
+
+        glColor3f(1.0,0.0,1.0)
+        glLineWidth(2)
+        glBegin(GL_LINES)
+        for i in range(vertices_end.shape[0]):
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices_end[i][0],vertices_end[i][1],vertices_end[i][2])
+            
+        for face in self.faces:
+            glVertex3f(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
+            glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
+            glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
+            glVertex3f(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
+            glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
+            glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
+        glEnd()
         
-        index0=self.opt.simu_index0
-        index1=self.opt.simu_index1
-        rate=0.03
+        index=self.opt.simu_index
+        rate=0.8
         forces=self.opt.simu_force*rate
+        forces_grad=self.opt.simu_force_grad*rate*10
+        equa_forces_grad=self.opt.simu_equa_force_grad*rate*100
         
         #draw current force
         id=0
-        glLineWidth(5)
+        glLineWidth(2)
         glBegin(GL_LINES)
         glColor3f(0.7,0.0,0.0)
-        for i in index0:
+        for i in index:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
             glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
             id=id+1
+        glEnd()
         
-        glColor3f(0.7,0.0,0.0)
-        for i in index1:
+        id=0
+        glLineWidth(2)
+        glBegin(GL_LINES)
+        glColor3f(0.0,0.8,0.0)
+        for i in index:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
-            glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
+            glVertex3f(vertices[i][0]+forces_grad[id][0],vertices[i][1]+forces_grad[id][1],vertices[i][2]+forces_grad[id][2])
+            id=id+1
+        glEnd()
+
+        id=0
+        glLineWidth(2)
+        glBegin(GL_LINES)
+        glColor3f(0.0,0.0,0.8)
+        for i in index:
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices[i][0]+equa_forces_grad[id][0],vertices[i][1]+equa_forces_grad[id][1],vertices[i][2]+equa_forces_grad[id][2])
             id=id+1
         glEnd()
 
         #draw max force
-        forcemax=(self.opt.tarp.tarp_info.Fmax*rate).clone().detach().cpu().numpy()
+        """ forcemax=(self.opt.tarp.tarp_info.Fmax*rate).clone().detach().cpu().numpy()
         id=0
         glLineWidth(2)
         glBegin(GL_LINES)
         glColor3f(1.0,0.0,0.0)
-        for i in index0:
+        for i in index:
             maxpos=forces[id]*forcemax/np.sqrt((forces[id,:]*forces[id,:]).sum())
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
             glVertex3f(vertices[i][0]+maxpos[0],vertices[i][1]+maxpos[1],vertices[i][2]+maxpos[2])
             id=id+1
-        
-        glColor3f(1.0,0.0,0.0)
-        for i in index1:
-            maxpos=forces[id]*forcemax/np.sqrt((forces[id,:]*forces[id,:]).sum())
-            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
-            glVertex3f(vertices[i][0]+maxpos[0],vertices[i][1]+maxpos[1],vertices[i][2]+maxpos[2])
-            id=id+1
-        glEnd()
+        glEnd() """
 
         #draw axis
         glLineWidth(2)

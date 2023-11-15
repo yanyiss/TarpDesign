@@ -1,8 +1,45 @@
 import cvxpy as cp
 import numpy as np
 
+def force_SOCP(vertices,index,center_id,reference_norm):
+    dir=(vertices[index,0:2]-vertices[center_id,0:2]).cpu().numpy()
+    dir_norm=np.linalg.norm(dir,axis=1,keepdims=True)
+    dir=np.divide(dir,dir_norm).flatten()
+    
+    #dir[:]=1.0
+
+    m=index.cpu().numpy().shape[0]
+    n=m*2
+    p=2
+    
+
+    A=[]
+    d=[]
+    for i in range(m):
+        A.append(np.zeros((2,n)))
+        A[i][0,i*2]=1.0
+        A[i][1,i*2+1]=1.0
+        d.append(np.array([reference_norm]))
+    F=np.zeros((p,n))
+    g=np.ones(p)
+    for i in range(n):
+        if (i%2)==0:
+            F[0,i]=1
+        else:
+            F[1,i]=1
+
+    x=cp.Variable(n)
+    soc_constraints=[
+        cp.SOC(d[i],A[i]@x) for i in range(m)
+        ]
+    prob=cp.Problem(cp.Maximize(dir.T@x),
+                    soc_constraints+[F@x==g])
+    prob.solve()
+    return x.value
+
+
 # Generate a random feasible SOCP.
-m = 3
+""" m = 3
 n = 10
 p = 5
 n_i = 5
@@ -37,4 +74,4 @@ print("A solution x is")
 print(x.value)
 for i in range(m):
     print("SOC constraint %i dual variable solution" % i)
-    print(soc_constraints[i].dual_value)
+    print(soc_constraints[i].dual_value) """

@@ -39,10 +39,11 @@ class tarp_info():
         self.C1=torch.from_numpy(data[-int(data[10]):].astype(int)).cuda()
         #vertex that are forced
         self.C=torch.cat([self.C0,self.C1],dim=0)
+        #self.C=0
         #vertically upward direction
-        n=np.zeros([batch_size,self.C.size(0),3]).astype(np.float64)
-        n[:,:,2]=1.0
-        self.n=torch.from_numpy(n).cuda()
+        #n=np.zeros([batch_size,self.C.size(0),3]).astype(np.float64)
+        #n[:,:,2]=1.0
+        #self.n=torch.from_numpy(n).cuda()
     
 def get_mesh_boundary(mesh_dir):
     mesh=openmesh.read_trimesh(mesh_dir)
@@ -50,5 +51,11 @@ def get_mesh_boundary(mesh_dir):
     for v in mesh.vertices():
         if mesh.is_boundary(v):
             index=np.append(index,v.idx())
-    return index
+    #index=np.delete(index,np.arange(1,index.size,2))
+    #index=np.delete(index,np.arange(1,index.size,2))
+    #index=np.delete(index,np.arange(1,index.size,2))
+    return torch.from_numpy(index.astype(int)).cuda()
+
+
+    
         
