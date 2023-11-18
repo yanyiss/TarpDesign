@@ -104,8 +104,8 @@ class SimulationWidget(QOpenGLWidget):
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
         glEnd()
 
-        vertices_end=self.opt.simu_vertices_grad*1000+vertices
-
+        #draw vertices grad
+        """ vertices_end=self.opt.simu_vertices_grad*1000+vertices
         glColor3f(1.0,0.0,1.0)
         glLineWidth(2)
         glBegin(GL_LINES)
@@ -120,12 +120,12 @@ class SimulationWidget(QOpenGLWidget):
             glVertex3f(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
             glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
-        glEnd()
+        glEnd() """
         
         index=self.opt.simu_index
         rate=0.8
         forces=self.opt.simu_force*rate
-        forces_grad=self.opt.simu_force_grad*rate*10
+        forces_grad=self.opt.simu_force_grad*rate*100
         equa_forces_grad=self.opt.simu_equa_force_grad*rate*100
         
         #draw current force
@@ -213,7 +213,7 @@ class SimulationWidget(QOpenGLWidget):
     def update_simulation(self):
         delta_time = 0.001  # Time step
         #self.df.step()
-        step=20
+        step=50
         if self.opt.itertimes>opt.MAX_ITER-step:
             return
         if self.opt.small_gradient:

@@ -24,6 +24,7 @@ def main():
     print(f)
     g=f.reshape(1,4,3)
     print(g)
+    print(torch.zeros((4,2,3)))
 
 
     """ print((x[0].t().sum(dim=1)**2).sum())
