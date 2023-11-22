@@ -105,15 +105,16 @@ class SimulationWidget(QOpenGLWidget):
         glEnd()
 
         #draw vertices grad
-        """ vertices_end=self.opt.simu_vertices_grad*1000+vertices
+        vertices_end=self.opt.simu_vertices_grad*1000+vertices
         glColor3f(1.0,0.0,1.0)
         glLineWidth(2)
         glBegin(GL_LINES)
         for i in range(vertices_end.shape[0]):
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
             glVertex3f(vertices_end[i][0],vertices_end[i][1],vertices_end[i][2])
+        glEnd()
             
-        for face in self.faces:
+        """ for face in self.faces:
             glVertex3f(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
             glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
@@ -125,8 +126,8 @@ class SimulationWidget(QOpenGLWidget):
         index=self.opt.simu_index
         rate=0.8
         forces=self.opt.simu_force*rate
-        forces_grad=self.opt.simu_force_grad*rate*100
-        equa_forces_grad=self.opt.simu_equa_force_grad*rate*100
+        forces_grad=self.opt.simu_force_grad*rate*5
+        equa_forces_grad=self.opt.simu_equa_force_grad*rate*1
         
         #draw current force
         id=0
@@ -142,7 +143,7 @@ class SimulationWidget(QOpenGLWidget):
         id=0
         glLineWidth(2)
         glBegin(GL_LINES)
-        glColor3f(0.0,0.8,0.0)
+        glColor3f(0.0,0.0,0.8)
         for i in index:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
             glVertex3f(vertices[i][0]+forces_grad[id][0],vertices[i][1]+forces_grad[id][1],vertices[i][2]+forces_grad[id][2])
@@ -152,7 +153,7 @@ class SimulationWidget(QOpenGLWidget):
         id=0
         glLineWidth(2)
         glBegin(GL_LINES)
-        glColor3f(0.0,0.0,0.8)
+        glColor3f(0.0,0.8,0.0)
         for i in index:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
             glVertex3f(vertices[i][0]+equa_forces_grad[id][0],vertices[i][1]+equa_forces_grad[id][1],vertices[i][2]+equa_forces_grad[id][2])

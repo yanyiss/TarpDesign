@@ -51,9 +51,12 @@ def get_mesh_boundary(mesh_dir):
     for v in mesh.vertices():
         if mesh.is_boundary(v):
             index=np.append(index,v.idx())
-    #index=np.delete(index,np.arange(1,index.size,2))
-    #index=np.delete(index,np.arange(1,index.size,2))
-    #index=np.delete(index,np.arange(1,index.size,2))
+    """ index=np.delete(index,np.arange(1,index.size,2))
+    index=np.delete(index,np.arange(1,index.size,2))
+    index=np.delete(index,np.arange(1,index.size,2))
+    index=np.delete(index,np.arange(1,index.size,2)) """
+    index[3]=205
+    index[205]=3
     return torch.from_numpy(index.astype(int)).cuda()
 
 

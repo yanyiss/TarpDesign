@@ -27,7 +27,7 @@ BALANCE_COF=1e-6
 NEWTON_RATE=1e-3
 STEP_SIZE=100
 DECAY_GAMMA=0.98
-LEARNING_RATE=0.01
+LEARNING_RATE=0.002
 MAX_ITER=20000
 SIGMA_VAL=1e-4
 numerical_error=1e-4
@@ -50,6 +50,13 @@ class ExternalForce(nn.Module):
             C1_dir=vertices[:,tarp_info.C1,:]-vertices[:,tarp_info.CI,:]
             C1_dir=C1_dir/torch.sqrt(torch.sum(C1_dir**2,dim=2)).t().repeat(1,3)
         else:
+            """ f=torch.tensor([[[   9.5,  13.09,   -10.0],[   -9.5,    13.09,  -10.0 ],
+                             [  15.4,    -5.0,  -10.0],[   -15.4,     -5.0,   -10.0],
+                             [   0.0,    -16.18,   -10.0],
+                             [ 0.0,  20.0,  18.82 ],
+                             [  19.0,  6.18,    18.82],[  -19.0,     6.18,   18.82 ],
+                             [  11.8,  -16.18,  18.82],[  -11.8,   -16.18,  18.82 ]
+                             ]]).cuda().double()  """
             f=torch.tensor([[[ -17.0,  -17.50,  -19.0 ],[  17.0,  -17.50,  -19.0 ],
                              [ -17.0,   17.50,  -19.0 ],[  17.0,   17.50,  -19.0 ],
                              [   0.0,  30.0,  -19.0 ],[   0.0, -30.0,  -19.0 ],
@@ -60,9 +67,22 @@ class ExternalForce(nn.Module):
             """ f=torch.tensor([[[ -17.32,  -10.0,  -20.0 ],[  17.32,  -10.0,  -20.0 ],
                              [ 0.0,    20.0,   84.1]]]).cuda().double() """
         
+        
         #f[:,:,0:2]=0
-        #f[:,:,2]=44.1/6
+        #f[:,:,2]=44.1/8
         #f=self.get_init_force(vertices,tarp_info,boundary_index)
+        """ f[:,:,2]=(60-44.1)/(boundary_index.shape[0]-2)
+        f[:,2,2]=3
+        f[:,3,2]=3 """
+        #f[0,0,0]=f[0,0,0]+0.0001
+        #f[0,-1,0]=f[0,-1,0]-0.0001
+        rrr=np.array([0,1,4,5,56,156,2,205])
+        fo=torch.zeros((batch_size,boundary_index.shape[0],3)).cuda().double()
+        fo[0,rrr,:]=f[0,0:8,:]
+        f=fo
+
+        
+
         self.register_buffer("force",nn.Parameter(f))
         uniquesize=self.force.shape[1]-1
         f=torch.zeros((batch_size,uniquesize,3)).double()
@@ -90,14 +110,15 @@ class ExternalForce(nn.Module):
     
     def get_init_force(self,vertices,tarp_info,boundary_index):
         val=tool.force_SOCP(vertices[0],boundary_index,tarp_info.CI,
-                            (tarp_info.mass*tarp_info.g*0.1/boundary_index.shape[0]).cpu().numpy()).reshape(boundary_index.shape[0],2)
+                            (tarp_info.mass*tarp_info.g*0.5/boundary_index.shape[0]).cpu().numpy()).reshape(boundary_index.shape[0],2)
         batch_size=vertices.shape[0]
+        #tarp_info.C=boundary_index
         #f=torch.zeros(batch_size,boundary_index.shape[0],3).cuda()
         f=np.zeros((batch_size,boundary_index.shape[0],3))
         average_weight=tarp_info.mass*tarp_info.g/boundary_index.shape[0]
         f[:,:,2]=average_weight.cpu().numpy()
-        #f[0,:,0]=val[:,0]
-        #f[0,:,1]=val[:,1]
+        f[0,:,0]=val[:,0]
+        f[0,:,1]=val[:,1]
         return torch.from_numpy(f).cuda()
         
 
@@ -244,7 +265,7 @@ class deform():
 
         boundary_index=TI.get_mesh_boundary(self.args.template_mesh)
         self.tarp = Tarp(self.args)
-        #self.tarp.tarp_info.C=boundary_index
+        self.tarp.tarp_info.C=boundary_index
         self.simu_pos=self.tarp.vertices[0].clone().detach().cpu().numpy()
         self.diffsimulator=DiffSimulation()
         self.diffsimulator.set_info(
@@ -270,11 +291,12 @@ class deform():
         #self.simu_index1=self.tarp.tarp_info.C1.clone().detach().cpu().numpy()
         self.simu_index=self.tarp.tarp_info.C.clone().detach().cpu().numpy()
         self.simu_jacobi=0
+        self.outer_itertimes=0
         self.itertimes=0
         self.simu_force=0
         self.simu_force_grad=0
         self.simu_equa_force_grad=0
-        #self.simu_vertices_grad=0
+        self.simu_vertices_grad=0
         self.set_all_forces()
 
         self.target_image = imageio.imread(self.args.image).astype('float32') / 255.
@@ -299,7 +321,7 @@ class deform():
         self.diffsimulator.set_forces(self.simu_force.flatten())
         self.simu_force_grad=self.simu_force
         self.simu_equa_force_grad=self.simu_force
-        #self.simu_vertices_grad=torch.zeros_like(self.tarp.vertices).clone().detach().cpu().numpy()[0]
+        self.simu_vertices_grad=torch.zeros_like(self.tarp.vertices).clone().detach().cpu().numpy()[0]
        
     def one_iterate(self):
 
@@ -340,34 +362,44 @@ class deform():
             return
         self.pd_step=0 """
 
+        #self.outer_itertimes=self.outer_itertimes+1
         if self.newton_flag==True:
             self.diffsimulator.newton()
+            #self.outer_itertimes=self.outer_itertimes+1
             print('newton')
         else:
             self.diffsimulator.Opt()
             print('pd')
-        
+        if self.itertimes%50==0:
+            self.simu_pos=self.diffsimulator.v.reshape(int(self.diffsimulator.v.size/3),3)
         self.diffsimulator.print_balance_info(BALANCE_COF)
         rate=self.diffsimulator.balance_rate
         if rate<NEWTON_RATE:
             self.newton_flag=True
         else:
             self.newton_flag=False
-        if rate>BALANCE_COF:
+        
+        if rate>BALANCE_COF and self.outer_itertimes<100:
             return
         
+        self.outer_itertimes=0
         self.newton_flag=False
-        self.simu_pos=self.diffsimulator.v.reshape(int(self.diffsimulator.v.size/3),3)
         
 
 
         self.diffsimulator.compute_jacobi()
+        jacobi=self.diffsimulator.jacobi.astype(np.float32)
+        """ self.write_jacobi(jacobi[:,0])
+        exit(0) """
+
+
         vertices=py_simulation.apply(self.external_force.force_displace,self.diffsimulator)
         self.tarp.vertices=vertices
         mesh=self.tarp.get_render_mesh()
         mesh=self.lighting(mesh)
         mesh=self.transform(mesh)
         shadow_image=self.rasterizer(mesh)
+
 
        
 
@@ -406,7 +438,7 @@ class deform():
         if self.itertimes%100==0:
             plt.savefig(os.path.join(self.para_result, 'loss.png'))
 
-        #vertices.retain_grad()
+        vertices.retain_grad()
         loss.backward()
 
         #self.simu_jacobi=self.diffsimulator.jacobi.astype(np.float32)
@@ -425,7 +457,7 @@ class deform():
         self.simu_equa_force_grad=torch.bmm(self.external_force.transform,self.external_force.force_displace\
                                             -self.external_force.force_last_displace)[0].clone().detach().cpu().numpy()
         #self.simu_equa_force_grad=-vertices[0,self.tarp.tarp_info.C,:].clone().detach().cpu().numpy()
-        #self.simu_vertices_grad=-vertices.grad[0].clone().detach().cpu().numpy()
+        self.simu_vertices_grad=-vertices.grad[0].clone().detach().cpu().numpy()
 
         delta=(self.external_force.force_displace-self.external_force.force_last_displace).clone().detach().cpu().numpy()
 
@@ -441,6 +473,8 @@ class deform():
             second_time=run_time-3600*hour_time-60*minute_time
             print (f'run time:{hour_time}hour{minute_time}minute{second_time}second')
 
+    def write_params(self):
+        pass
 
     def write_results(self):
         self.tarp.get_render_mesh().save_obj(os.path.join(self.para_result,'result.obj'))
@@ -463,4 +497,25 @@ class deform():
             print(file_force[i],file=file)
         file.close()
 
+    def write_jacobi(self,jacobi):
+        np.set_printoptions(threshold=self.tarp.vertices.shape[1]*3)
+        file=0
+        if os.path.exists(os.path.join(self.para_result,'jacobi.txt'))==False:
+            os.mknod(os.path.join(self.para_result,'jacobi.txt'))
+        file=open(os.path.join(self.para_result,'jacobi.txt'),'w')
+        file_force=jacobi
+        for i in range(file_force.shape[0]):
+            print(file_force[i],file=file)
+        file.close()
+
+    def write_leftmat(self,leftmat):
+        np.set_printoptions(threshold=self.tarp.vertices.shape[1]*3)
+        file=0
+        if os.path.exists(os.path.join(self.para_result,'leftmat.txt'))==False:
+            os.mknod(os.path.join(self.para_result,'leftmat.txt'))
+        file=open(os.path.join(self.para_result,'leftmat.txt'),'w')
+        file_force=leftmat
+        for i in range(file_force.shape[0]):
+            print(file_force[i],file=file)
+        file.close()
 
