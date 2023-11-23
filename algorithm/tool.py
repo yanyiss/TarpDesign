@@ -21,7 +21,7 @@ def force_SOCP(vertices,index,center_id,reference_norm):
         A[i][1,i*2+1]=1.0
         d.append(np.array([reference_norm]))
     F=np.zeros((p,n))
-    g=np.ones(p)
+    g=np.zeros(p)
     for i in range(n):
         if (i%2)==0:
             F[0,i]=1

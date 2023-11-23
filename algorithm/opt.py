@@ -24,7 +24,7 @@ IMAGE_SIZE=128
 VIEW_ANGLE=4  
 VIEW_SCALE=0.25
 BALANCE_COF=1e-6
-NEWTON_RATE=1e-3
+NEWTON_RATE=1e-4
 STEP_SIZE=100
 DECAY_GAMMA=0.98
 LEARNING_RATE=0.002
@@ -70,16 +70,16 @@ class ExternalForce(nn.Module):
         
         #f[:,:,0:2]=0
         #f[:,:,2]=44.1/8
-        #f=self.get_init_force(vertices,tarp_info,boundary_index)
+        f=self.get_init_force(vertices,tarp_info,boundary_index)
         """ f[:,:,2]=(60-44.1)/(boundary_index.shape[0]-2)
         f[:,2,2]=3
         f[:,3,2]=3 """
         #f[0,0,0]=f[0,0,0]+0.0001
         #f[0,-1,0]=f[0,-1,0]-0.0001
-        rrr=np.array([0,1,4,5,56,156,2,205])
+        """ rrr=np.array([0,1,4,5,56,156,2,205])
         fo=torch.zeros((batch_size,boundary_index.shape[0],3)).cuda().double()
         fo[0,rrr,:]=f[0,0:8,:]
-        f=fo
+        f=fo """
 
         
 
@@ -110,15 +110,33 @@ class ExternalForce(nn.Module):
     
     def get_init_force(self,vertices,tarp_info,boundary_index):
         val=tool.force_SOCP(vertices[0],boundary_index,tarp_info.CI,
-                            (tarp_info.mass*tarp_info.g*0.5/boundary_index.shape[0]).cpu().numpy()).reshape(boundary_index.shape[0],2)
+                            (tarp_info.mass*tarp_info.g/boundary_index.shape[0]).cpu().numpy()).reshape(boundary_index.shape[0],2)
         batch_size=vertices.shape[0]
-        #tarp_info.C=boundary_index
-        #f=torch.zeros(batch_size,boundary_index.shape[0],3).cuda()
         f=np.zeros((batch_size,boundary_index.shape[0],3))
-        average_weight=tarp_info.mass*tarp_info.g/boundary_index.shape[0]
-        f[:,:,2]=average_weight.cpu().numpy()
+        #print(val[:,0].sum(),val[:,1].sum())
         f[0,:,0]=val[:,0]
         f[0,:,1]=val[:,1]
+
+        """ #cut the boundary to several segments and set upward and downward initial force separately
+        segment_num=8 
+        upward=np.array([]).astype(int)
+        downward=np.array([]).astype(int)
+        for i in range(segment_num):
+            start=np.floor(boundary_index.shape[0]*i/segment_num).astype(int)
+            end=np.floor(boundary_index.shape[0]*(i+1)/segment_num).astype(int)
+            if i%2==0:
+                upward=np.append(upward,boundary_index[start:end].cpu().numpy())
+            else:
+                downward=np.append(downward,boundary_index[start:end].cpu().numpy())
+        
+        average_weight=tarp_info.mass*tarp_info.g/boundary_index.shape[0]
+        f[:,downward,2]=-average_weight.cpu().numpy()
+        f[:,upward,2]=(tarp_info.mass*tarp_info.g+average_weight*downward.shape[0]).cpu().numpy()/upward.shape[0]
+        #print(f[:,:,0].sum(),f[:,:,1].sum(),f[:,:,2].sum())
+        return torch.from_numpy(f).cuda() """
+
+        average_weight=tarp_info.mass*tarp_info.g/boundary_index.shape[0]
+        f[:,:,2]=average_weight.cpu().numpy()
         return torch.from_numpy(f).cuda()
         
 
@@ -141,7 +159,7 @@ class ExternalForce(nn.Module):
     
     def L1Norm(self,force):
         return torch.tensor([0]).cuda()
-        force_magnitude=torch.sqrt((force[0]**2).sum(dim=1)+self.epsilon)
+        force_magnitude=torch.sqrt((force[0]**2).sum(dim=1))
         weight=torch.pow(force_magnitude.clone().detach()+self.xi,self.eta-1.0)
         #self.xi=self.xi*self.rho
         print('xi:',self.xi)
@@ -182,7 +200,6 @@ class ExternalForce(nn.Module):
             break
 
         self.force_displace.data=self.force_last_displace+deltaforce
-
 
     def forward(self):
         self.force_last_displace=self.force_displace.clone().detach()

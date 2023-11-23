@@ -47,6 +47,20 @@ class tarp_info():
     
 def get_mesh_boundary(mesh_dir):
     mesh=openmesh.read_trimesh(mesh_dir)
+    hl=0
+    v_index=np.array([])
+    for hl_iter in mesh.halfedges():
+        if mesh.is_boundary(hl_iter):
+            hl=hl_iter
+            break
+    hl_iter=mesh.next_halfedge_handle(hl)
+    v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
+    while(hl_iter!=hl):
+        hl_iter=mesh.next_halfedge_handle(hl_iter)
+        v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
+    return torch.from_numpy(v_index.astype(int)).cuda()
+
+
     index=np.array([])
     for v in mesh.vertices():
         if mesh.is_boundary(v):
@@ -55,8 +69,8 @@ def get_mesh_boundary(mesh_dir):
     index=np.delete(index,np.arange(1,index.size,2))
     index=np.delete(index,np.arange(1,index.size,2))
     index=np.delete(index,np.arange(1,index.size,2)) """
-    index[3]=205
-    index[205]=3
+    """ index[3]=205
+    index[205]=3 """
     return torch.from_numpy(index.astype(int)).cuda()
 
 
