@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import openmesh
+import algorithm.tool as tool
 
 class tarp_info():
     def __init__(self,vertex,data):
@@ -44,34 +44,79 @@ class tarp_info():
         #n=np.zeros([batch_size,self.C.size(0),3]).astype(np.float64)
         #n[:,:,2]=1.0
         #self.n=torch.from_numpy(n).cuda()
-    
-def get_mesh_boundary(mesh_dir):
-    mesh=openmesh.read_trimesh(mesh_dir)
-    hl=0
-    v_index=np.array([])
-    for hl_iter in mesh.halfedges():
-        if mesh.is_boundary(hl_iter):
-            hl=hl_iter
-            break
-    hl_iter=mesh.next_halfedge_handle(hl)
-    v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
-    while(hl_iter!=hl):
-        hl_iter=mesh.next_halfedge_handle(hl_iter)
-        v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
-    return torch.from_numpy(v_index.astype(int)).cuda()
 
+class tarp_params():
+    def __init__(self):
+        meta_params=tool.read_params()
+        #dir
+        self.current_dir=meta_params['current_dir']
+        self.data_dir=meta_params['data_dir']
+        #source file
+        self.template_mesh=meta_params['template_mesh']
+        self.image=meta_params['image']
+        self.info_path=meta_params['info_path']
+        self.output_dir=meta_params['output_dir']
+        #dense file
+        self.force_file=meta_params['force_file']
+        self.forcedis_file=meta_params['forcedis_file']
+        self.result_mesh=meta_params['result_mesh']
+        #save file setting
+        self.saveshadow_hz=meta_params['saveshadow_hz']
+        self.saveloss_hz=meta_params['saveloss_hz']
+        self.saveresult_hz=meta_params['saveresult_hz']
+        #rendering
+        self.image_size=meta_params['IMAGE_SIZE']
+        self.sigmal_value=meta_params['SIGMA_VAL']
+        self.view_angle=meta_params['VIEW_ANGLE']
+        self.view_scale=meta_params['VIEW_SCALE']
+        #gui
+        self.use_vertgrad=meta_params['use_vertgrad']
+        self.use_forcegrad=meta_params['use_forcegrad']
+        self.use_adamgrad=meta_params['use_adamgrad']
+        self.updategl_hz=meta_params['updategl_hz']
+        #simulation
+        self.balance_cof=meta_params['BALANCE_COF']
+        self.newton_rate=meta_params['NEWTON_RATE']
+        #optimization setting
+        self.step_size=meta_params['STEP_SIZE']
+        self.decay_gamma=meta_params['DECAY_GAMMA']
+        self.learning_rate=meta_params['LEARNING_RATE']
+        self.max_iter=meta_params['MAX_ITER']
+        self.grad_error=meta_params['grad_error']
+        self.nume_error=meta_params['nume_error']
+        #optimization parameter
+        self.xi=meta_params['xi']
+        self.eta=meta_params['eta']
+        self.rho=meta_params['rho']
+        self.epsilon=meta_params['epsilon']
+        self.force_delay=meta_params['force_delay']
+        self.image_weight=meta_params['image_weight']
+        self.fmax_weight=meta_params['fmax_weight']
+        self.fdir_weight=meta_params['fdir_weight']
+        self.fnorm1_weight=meta_params['fnorm1_weight']
+        #loss type
+        self.loss_type=meta_params['loss_type']
+        self.fmax_cons=meta_params['fmax_cons']
+        self.fdir_cons=meta_params['fdir_cons']
+        self.fnorm1_cons=meta_params['fnorm1_cons']
+        #other
+        self.batch_size=meta_params['batch_size']
+        self.use_denseInfo=meta_params['use_denseInfo']
 
-    index=np.array([])
-    for v in mesh.vertices():
-        if mesh.is_boundary(v):
-            index=np.append(index,v.idx())
-    """ index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2)) """
-    """ index[3]=205
-    index[205]=3 """
-    return torch.from_numpy(index.astype(int)).cuda()
+import soft_renderer as sr
+class Tarp():
+    def __init__(self,params):
+        template_mesh=sr.Mesh.from_obj(params.template_mesh)
+        self.batch_size=params.batch_size
+        self.vertices=template_mesh.vertices
+        self.faces=template_mesh.faces
+
+        data=np.loadtxt(params.info_path,dtype=np.float64)
+        self.tarp_info=tarp_info(self.vertices,data)
+
+    def get_render_mesh(self):
+        return sr.Mesh(self.vertices.repeat(self.batch_size,1,1),self.faces.repeat(self.batch_size,1,1))
+
 
 
     

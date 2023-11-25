@@ -1,0 +1,65 @@
+#source file
+template_mesh: obj/hex06.obj
+image:         image/square.png
+info_path:     info/hex_info06.txt
+output_dir:    results
+
+#dense file
+force_file:    denseInfo/force.txt
+forcedis_file: denseInfo/force_displace.txt
+result_mesh:   denseInfo/result.obj
+
+#save file setting
+saveshadow_hz: 20
+saveloss_hz:   100
+saveresult_hz: 200
+
+#rendering
+IMAGE_SIZE:    128
+SIGMA_VAL:     0.0001
+VIEW_ANGLE:    4  
+VIEW_SCALE:    0.25
+
+#gui
+use_vertgrad:  0
+use_forcegrad: 0
+use_adamgrad:  0
+updategl_hz:   50
+
+#simulation
+BALANCE_COF:   0.000001
+NEWTON_RATE:   0.0001
+
+#optimization setting
+STEP_SIZE:     100
+DECAY_GAMMA:   0.98
+LEARNING_RATE: 0.001
+MAX_ITER:      20000
+grad_error:    0.0000001
+nume_error:    0.0000001
+
+#optimization parameter
+xi:            1.0
+eta:           0.0
+rho:           0.8
+epsilon:       0.0000000001
+force_delay:   5.0
+image_weight:  1.0
+fmax_weight:   0.001
+fdir_weight:   0.001
+fnorm1_weight: 0.0001
+
+#loss type: image or shadow
+loss_type:     image
+fmax_cons:     1
+fdir_cons:     0
+fnorm1_cons:   1
+
+#other
+batch_size:    1
+use_denseInfo: 0
+
+
+
+
+

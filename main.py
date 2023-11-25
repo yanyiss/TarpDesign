@@ -213,13 +213,11 @@ class SimulationWidget(QOpenGLWidget):
 
     def update_simulation(self):
         delta_time = 0.001  # Time step
-        #self.df.step()
-        step=50
-        if self.opt.itertimes>opt.MAX_ITER-step:
+        if self.opt.itertimes>opt.params.max_iter-opt.params.updategl_hz:
             return
         if self.opt.small_gradient:
             return
-        for i in range(0,step):
+        for i in range(0,opt.params.updategl_hz):
             self.opt.one_iterate()
         self.update()
         
