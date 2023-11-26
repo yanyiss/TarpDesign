@@ -17,6 +17,7 @@ saveresult_hz: 200
 #rendering
 IMAGE_SIZE:    128
 SIGMA_VAL:     0.0001
+GAMMA_VAL:     0.00000001
 VIEW_ANGLE:    4  
 VIEW_SCALE:    0.25
 
@@ -37,12 +38,16 @@ LEARNING_RATE: 0.001
 MAX_ITER:      20000
 grad_error:    0.0000001
 nume_error:    0.0000001
+enable_prox:   1
 
 #optimization parameter
-xi:            1.0
-eta:           0.0
-rho:           0.8
-epsilon:       0.0000000001
+l1_xi:         1.0
+l1_eta:        0.0
+l1_rho:        0.5
+l1_epsilon:    0.0000000001
+l1_alpha:      0.2
+l1_beta:       1.0
+
 force_delay:   5.0
 image_weight:  1.0
 fmax_weight:   0.001

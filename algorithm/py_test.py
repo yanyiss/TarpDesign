@@ -20,6 +20,9 @@ def main():
     x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
     print(x)
     print(torch.norm(x,p=2,dim=2))
+    ff=torch.norm(x,p=2,dim=2)
+    print(ff.unsqueeze(dim=2).repeat(1,1,3))
+
     f=x[0].flatten()
     print(f)
     g=f.reshape(1,4,3)

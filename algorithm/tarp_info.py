@@ -66,7 +66,8 @@ class tarp_params():
         self.saveresult_hz=meta_params['saveresult_hz']
         #rendering
         self.image_size=meta_params['IMAGE_SIZE']
-        self.sigmal_value=meta_params['SIGMA_VAL']
+        self.sigma_value=meta_params['SIGMA_VAL']
+        self.gamma_value=meta_params['GAMMA_VAL']
         self.view_angle=meta_params['VIEW_ANGLE']
         self.view_scale=meta_params['VIEW_SCALE']
         #gui
@@ -82,13 +83,16 @@ class tarp_params():
         self.decay_gamma=meta_params['DECAY_GAMMA']
         self.learning_rate=meta_params['LEARNING_RATE']
         self.max_iter=meta_params['MAX_ITER']
+        self.enable_prox=meta_params['enable_prox']
         self.grad_error=meta_params['grad_error']
         self.nume_error=meta_params['nume_error']
         #optimization parameter
-        self.xi=meta_params['xi']
-        self.eta=meta_params['eta']
-        self.rho=meta_params['rho']
-        self.epsilon=meta_params['epsilon']
+        self.l1_xi=meta_params['l1_xi']
+        self.l1_eta=meta_params['l1_eta']
+        self.l1_rho=meta_params['l1_rho']
+        self.l1_epsilon=meta_params['l1_epsilon']
+        self.l1_alpha=meta_params['l1_alpha']
+        self.l1_beta=meta_params['l1_beta']
         self.force_delay=meta_params['force_delay']
         self.image_weight=meta_params['image_weight']
         self.fmax_weight=meta_params['fmax_weight']
@@ -102,6 +106,9 @@ class tarp_params():
         #other
         self.batch_size=meta_params['batch_size']
         self.use_denseInfo=meta_params['use_denseInfo']
+
+        if self.enable_prox:
+            self.fnorm1_cons=0
 
 import soft_renderer as sr
 class Tarp():

@@ -127,4 +127,11 @@ def write_data(data,file_dir_name):
     for i in range(data.shape[0]):
         print(data[i],file=file)
     file.close()
+
+def write_readme(info,file_dir_name):
+    if os.path.exists(file_dir_name)==False:
+        os.mknod(file_dir_name)
+    file=open(file_dir_name,'w')
+    print(info,file=file)
+    file.close()
     
