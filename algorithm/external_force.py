@@ -78,6 +78,9 @@ class ExternalForce(nn.Module):
         self.l1_epsilon=params.l1_epsilon
         self.l1_alpha=params.l1_alpha
         self.l1_beta=params.l1_beta
+
+        self.weight=0
+        #self.update_weight()
     
     def get_init_force(self,vertices,tarp_info,boundary_index):
         val=tool.force_SOCP(vertices[0],boundary_index,tarp_info.CI,
@@ -134,11 +137,18 @@ class ExternalForce(nn.Module):
         return self.logelp(self.tarp_info.Fmax**2-f2, self.tarp_info.Fmax*2-self.dF).sum()\
               +self.logelp(fz2/f2-self.theta2, self.dtheta).sum()
     
+    def update_weight(self):
+        self.weight=torch.sqrt((self.now_force()**2).sum(dim=2)+self.l1_epsilon).clone().detach()
+        self.weight=torch.pow(self.weight+self.l1_xi,self.l1_eta-1.0)
+        self.l1_xi=self.l1_xi*self.l1_rho
+
     def FNorm1(self,forces):
-        force_magnitude=torch.sqrt((forces[0]**2).sum(dim=1)+self.l1_epsilon)
+        """ force_magnitude=torch.sqrt((forces[0]**2).sum(dim=1)+self.l1_epsilon)
         weight=torch.pow(force_magnitude.clone().detach()+self.l1_xi,self.l1_eta-1.0)
         self.l1_xi=self.l1_xi*self.l1_rho
-        return (force_magnitude*weight).sum()
+        return (force_magnitude*weight).sum() """
+        force_magnitude=torch.sqrt((forces**2).sum(dim=2)+self.l1_epsilon)
+        return (force_magnitude*self.weight).sum()
     
     def linesearch(self):
         if params.fmax_cons+params.fdir_cons==0:
@@ -182,12 +192,12 @@ class ExternalForce(nn.Module):
               +((self.FNorm1(forces)*params.fnorm1_weight) if params.fnorm1_cons else zero)
 
     #combine reweighted-l1 and proximal gradient --> n-1 forces rather than n
-    def prox(self,g,weight):
+    def prox(self,g):
         g_magnitude=torch.norm(g,p=2,dim=2).unsqueeze(dim=2).repeat(1,1,3)
+        weight=self.l1_alpha*params.fnorm1_weight*self.weight[:,0:-1].unsqueeze(dim=2).repeat(1,1,3)
         return torch.where(g_magnitude>weight,(1.0-weight/g_magnitude)*g,0.0)
 
     def prox_processing(self):
-        force_magnitude=torch.norm(self.force[:,0:-1,:]+self.force_displace,p=2,dim=2)
-        weight=self.l1_alpha*params.fnorm1_weight*torch.pow(force_magnitude+self.l1_xi,self.l1_eta-1.0).unsqueeze(dim=2).repeat(1,1,3)
-        dh=self.force_last_displace-self.prox(self.force_last_displace-self.l1_alpha*(self.force_last_displace-self.force_displace),weight)
+        dh=self.force[:,0:-1,:]+self.force_last_displace-\
+           self.prox(self.force[:,0:-1,:]+self.force_last_displace-self.l1_alpha*(self.force_last_displace-self.force_displace))
         self.force_displace.data=self.force_last_displace-self.l1_beta*dh

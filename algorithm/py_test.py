@@ -16,7 +16,7 @@ import argparse
 import soft_renderer as sr
 def main():
     #print(example.add([[4,5,6,7,7],[5,6,7,2,1]]))
-    
+    print(np.array([1,2,3]))
     x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
     print(x)
     print(torch.norm(x,p=2,dim=2))

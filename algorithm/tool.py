@@ -118,14 +118,17 @@ import shutil
 def copy_file(file_name,file_dir):
     shutil.copy(file_name,os.path.join(file_dir,os.path.split(file_name)[1]))
 
-def write_data(data,file_dir_name):
-    data=data.flatten()
+def write_data(data,file_dir_name,x3=True):
     np.set_printoptions(threshold=data.shape[0])
     if os.path.exists(file_dir_name)==False:
         os.mknod(file_dir_name)
     file=open(file_dir_name,'w')
-    for i in range(data.shape[0]):
-        print(data[i],file=file)
+    if x3:
+        for i in range(data.shape[0]):
+            print(data[i,0],data[i,1],data[i,2],file=file)
+    else:
+        for i in range(data.shape[0]):
+            print(data[i],file=file)
     file.close()
 
 def write_readme(info,file_dir_name):

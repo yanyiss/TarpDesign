@@ -6,7 +6,7 @@
 
 9.8  #gravitational acceleration  unit: m/s^2
 
-1e2  #maximum force on the rope   unit: N
+8e1  #maximum force on the rope   unit: N
 
 1.8  #minimum height of the tarp  unit: m
 

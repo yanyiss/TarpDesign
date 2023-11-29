@@ -41,12 +41,14 @@ class deform():
 
 
         self.transform=sr.LookAt(perspective=False,viewing_scale=params.view_scale,eye=[0,0,-1.0])
+        #self.transform=sr.LookAt(perspective=False,viewing_scale=params.view_scale,eye=[-3,3,-3.0])
         #self.transform=sr.LookAt(viewing_angle=VIEW_ANGLE,eye=[0,0,-50])
-        self.lighting=sr.Lighting(directions=[0,0,1])
+        self.lighting=sr.Lighting(directions=[0,0,1.0])
         self.rasterizer=sr.SoftRasterizer(image_size=params.image_size,sigma_val=params.sigma_value,gamma_val=params.gamma_value,aggr_func_rgb='hard')
 
         boundary_index=tool.get_mesh_boundary(params.template_mesh)
         self.tarp = TI.Tarp(params)
+
         self.tarp.tarp_info.C=boundary_index
         self.simu_pos=self.tarp.vertices[0].clone().detach().cpu().numpy()
         self.diffsimulator=DiffSimulation()
@@ -59,7 +61,7 @@ class deform():
                         self.tarp.tarp_info.mass.clone().detach().cpu().numpy(),
                         self.tarp.tarp_info.CI.clone().detach().cpu().numpy()
                         )
-        self.newton_flag=False
+        #self.newton_flag=False
         self.small_gradient=False
 
         self.external_force=external_force.ExternalForce(self.tarp.vertices,self.tarp.tarp_info,boundary_index).cuda()
@@ -87,8 +89,19 @@ class deform():
         tool.write_readme(' ',os.path.join(self.result_folder,'readme.txt'))
 
 
-        """ self.target_image = imageio.imread(self.args.image).astype('float32') / 255.
-        save_image=np.zeros([1,128,128,4])
+
+
+        #self.tarp.vertices[:,:,0]=self.tarp.vertices[:,:,0]-self.tarp.vertices[:,326,0]
+        #self.tarp.vertices[:,:,1]=self.tarp.vertices[:,:,1]-self.tarp.vertices[:,326,1]
+        """ tr=self.tarp.faces[:,:,0].clone()
+        self.tarp.faces[:,:,0]=self.tarp.faces[:,:,1]
+        self.tarp.faces[:,:,1]=tr
+        self.tarp.get_render_mesh().save_obj(os.path.join(self.result_folder,'result.obj')) """
+
+
+
+        #self.target_image = imageio.imread(self.args.image).astype('float32') / 255.
+        """  save_image=np.zeros([1,128,128,4])
         save_image[0,46:82,46:82,0]=0.5#np.where(self.target_image[44:84,44:84]>0.0000001,0.5,0.0)
         save_image[0,46:82,46:82,1]=0.5#np.where(self.target_image[44:84,44:84]>0.0000001,0.5,0.0)
         save_image[0,46:82,46:82,2]=0.5#np.where(self.target_image[44:84,44:84]>0.0000001,0.5,0.0)
@@ -105,7 +118,7 @@ class deform():
        
     def one_iterate(self):
         #compute balance
-        if self.newton_flag==True:
+        """ if self.newton_flag==True:
             self.diffsimulator.newton()
             print('newton')
         else:
@@ -122,7 +135,20 @@ class deform():
         if rate>params.balance_cof:
             return
         
-        self.newton_flag=False
+        self.newton_flag=False """
+        #if self.itertimes%params.updategl_hz==0:
+        self.simu_pos=self.diffsimulator.v.reshape(int(self.diffsimulator.v.size/3),3)
+        self.diffsimulator.print_balance_info(params.balance_cof)
+        rate=self.diffsimulator.balance_rate
+        if rate>params.balance_cof:
+            if rate<params.newton_rate:
+                self.diffsimulator.newton()
+            else:
+                self.diffsimulator.Opt()
+            return
+        
+        if self.itertimes%params.update_w_hz==0:
+            self.external_force.update_weight()
         self.diffsimulator.compute_jacobi()
 
         #get shadow image from mesh
@@ -136,14 +162,18 @@ class deform():
 
 
         #compute loss using force and shadow image
-        barrier_loss=self.external_force()
-        shadow_loss=shadow_image_loss(shadow_image,self.target_image)
-        loss=barrier_loss+shadow_loss
         self.external_force.record_last_displace()
+        barrier_loss=self.external_force()
+        shadow_loss=shadow_image_loss(shadow_image,self.target_image)*params.image_weight
+        loss=barrier_loss+shadow_loss
         
         #update loss figure
         figure_x.append(self.itertimes)
         barrier_loss_cpu=barrier_loss.clone().detach().cpu().numpy()
+        if params.enable_prox and not params.fnorm1_cons:
+            barrier_loss_cpu=barrier_loss_cpu+\
+                self.external_force.FNorm1(self.external_force.force+\
+                torch.bmm(self.external_force.transform,self.external_force.force_displace)).clone().detach().cpu().numpy()*params.fnorm1_weight
         shadow_loss_cpu=shadow_loss.clone().detach().cpu().numpy()
         figure_shadowloss.append(shadow_loss_cpu)
         figure_loss.append(barrier_loss_cpu+shadow_loss_cpu)
@@ -162,6 +192,7 @@ class deform():
         if self.itertimes%params.saveresult_hz==0:
             self.write_results()
         self.itertimes=self.itertimes+1
+        #exit(0)
 
         #backward
         if params.use_vertgrad:
@@ -170,10 +201,10 @@ class deform():
         self.optimizer.step()
         self.scheduler.step()
 
-        #prox processing
-        """ if params.enable_prox:
+        #proximal processing
+        if params.enable_prox:
             self.external_force.prox_processing()
- """
+
         #gui info
         if params.use_forcegrad:
             self.simu_force_grad=-torch.bmm(self.external_force.transform,self.external_force.force_displace.grad)[0].clone().detach().cpu().numpy()
@@ -205,10 +236,18 @@ class deform():
 
     def write_results(self):
         self.tarp.get_render_mesh().save_obj(os.path.join(self.result_folder,'result.obj'))
-        tool.write_data(self.external_force.force.clone().detach().cpu().numpy(),os.path.join(self.result_folder,'force.txt'))
+        primal_force=self.external_force.force[0].clone().detach().cpu().numpy()
+        tool.write_data(primal_force,os.path.join(self.result_folder,'force.txt'))
         #here I use force_last_displace rather than force_displace because force_displace has been updated
-        tool.write_data(torch.bmm(self.external_force.transform,self.external_force.force_last_displace).clone().detach().cpu().numpy(),
-                        os.path.join(self.result_folder,'force_displace.txt'))
+        delta_force=torch.bmm(self.external_force.transform,self.external_force.force_last_displace)[0].clone().detach().cpu().numpy()
+        tool.write_data(delta_force,os.path.join(self.result_folder,'force_displace.txt'))
+        tool.write_data(primal_force+delta_force,os.path.join(self.result_folder,'last_force.txt'))
+        
+        run_time=np.floor(time.time()-self.begin_time)
+        hour_time=run_time//3600
+        minute_time=(run_time-3600*hour_time)//60
+        second_time=run_time-3600*hour_time-60*minute_time
+        tool.write_data(np.array([self.itertimes,hour_time,minute_time,second_time]),os.path.join(self.result_folder,'time.txt'),x3=False)
 
     def write_jacobi(self,jacobi):
         tool.write_data(jacobi.clone().detach().cpu().numpy(),os.path.join(self.result_folder,'jacobi.txt'))

@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 import numpy as np
 import algorithm.tool as tool
 
@@ -83,6 +82,7 @@ class tarp_params():
         self.decay_gamma=meta_params['DECAY_GAMMA']
         self.learning_rate=meta_params['LEARNING_RATE']
         self.max_iter=meta_params['MAX_ITER']
+        self.update_w_hz=meta_params['update_w_hz']
         self.enable_prox=meta_params['enable_prox']
         self.grad_error=meta_params['grad_error']
         self.nume_error=meta_params['nume_error']

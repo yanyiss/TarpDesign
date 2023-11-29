@@ -1,12 +1,12 @@
 1e-2 #small coef
 
-1e4  #stiffnesss                  unit: kg/(m * s^2)
+1e3  #stiffnesss                  unit: kg/(m * s^2)
 
 4.5  #mesh mass                   unit: kg
 
 9.8  #gravitational acceleration  unit: m/s^2
 
-3e2  #maximum force on the rope   unit: N
+8e1  #maximum force on the rope   unit: N
 
 1.8  #minimum height of the tarp  unit: m
 
