@@ -4,6 +4,7 @@ import numpy as np
 
 import algorithm.tarp_info as TI
 import algorithm.tool as tool
+import os
 
 params=TI.tarp_params()
 
@@ -44,6 +45,10 @@ class ExternalForce(nn.Module):
         #data=np.loadtxt(args.info_path,dtype=np.float64) """
         f=self.get_init_force(vertices,tarp_info,boundary_index)
 
+
+        """ er=torch.from_numpy(np.loadtxt(os.path.join(params.data_dir,'results/sparseresult/last_force.txt'),dtype=np.float64)).cuda()
+        f=er.reshape(1,206,3) """
+
         if params.use_denseInfo:
             f=torch.from_numpy(np.loadtxt(params.force_file,
                                           dtype=np.float64)).reshape(batch_size,f.shape[1],3).cuda().double()
@@ -59,11 +64,14 @@ class ExternalForce(nn.Module):
         transform=torch.zeros((batch_size,self.force.shape[1],uniquesize)).double()
         for i in range(uniquesize):
             transform[:,i,i]=1.0
-            #transform[:,i+1,i]=-1.0
-        transform[:,uniquesize,:]=-1.0
+            transform[:,i+1,i]=-1.0
+        #transform[:,uniquesize,:]=-1.0
         self.register_buffer("transform",nn.Parameter(transform))
 
         self.tarp_info=tarp_info
+        if self.tarp_info.Fmax<params.force_delay:
+            print('too big force delay')
+            exit(0)
         self.elp=tarp_info.elp
         """ self.theta2=0.04
         self.dtheta=0.02
@@ -80,6 +88,11 @@ class ExternalForce(nn.Module):
         self.l1_beta=params.l1_beta
 
         self.weight=0
+        self.boundary_dir=0
+        self.update_boudary_dir(vertices)
+        self.fmax_loss=0
+        self.fdir_loss=0
+        self.fnorm1_loss=0
         #self.update_weight()
     
     def get_init_force(self,vertices,tarp_info,boundary_index):
@@ -115,6 +128,11 @@ class ExternalForce(nn.Module):
         
     def now_force(self):
         return self.force+torch.bmm(self.transform,self.force_displace)
+    
+    def update_boudary_dir(self,vertices):
+        self.boundary_dir=vertices[:,self.tarp_info.C,:]-vertices[:,self.tarp_info.CI,:]
+        self.boundary_dir[:,:,2]=0.0
+        self.boundary_dir=self.boundary_dir/torch.norm(self.boundary_dir,p=2,dim=2).unsqueeze(dim=2).repeat(1,1,3)
 
     def logelp(self,x,elp=0.0):
         elp=max(elp,self.elp)
@@ -124,18 +142,10 @@ class ExternalForce(nn.Module):
         f2=(forces**2).sum(dim=2)
         return self.logelp(self.tarp_info.Fmax**2-f2,self.tarp_info.Fmax*params.force_delay*2-params.force_delay**2).sum()
 
-    def FConstraint(self,forces):
-        return torch.tensor([0]).cuda()
-        f2=(force**2).sum(dim=2)
-        fz2=force[:,:,2]**2
-        """ print(force)
-        print('F2Fz2')
-        print(F2)
-        print(Fz2)"""
-        """ print(self.tarp_info.Fmax**2-f2, self.tarp_info.Fmax*2-1.0,
-              +self.logelp(fz2/f2-self.theta2, 0.01).sum())  """
-        return self.logelp(self.tarp_info.Fmax**2-f2, self.tarp_info.Fmax*2-self.dF).sum()\
-              +self.logelp(fz2/f2-self.theta2, self.dtheta).sum()
+    def FdirConstraint(self,forces):
+        forces_mag=torch.norm(forces,p=2,dim=2).unsqueeze(dim=2).repeat(1,1,3).clone().detach()
+        innerproduct=torch.sum(torch.where(forces_mag>self.l1_epsilon,self.boundary_dir*forces/forces_mag,1.0),dim=2)
+        return self.logelp(innerproduct+1.0,params.cosine_delay+1.0).sum()
     
     def update_weight(self):
         self.weight=torch.sqrt((self.now_force()**2).sum(dim=2)+self.l1_epsilon).clone().detach()
@@ -150,16 +160,18 @@ class ExternalForce(nn.Module):
         force_magnitude=torch.sqrt((forces**2).sum(dim=2)+self.l1_epsilon)
         return (force_magnitude*self.weight).sum()
     
-    def linesearch(self):
+    def linesearch(self,vertices):
         if params.fmax_cons+params.fdir_cons==0:
             return
-        
+        if params.fdir_cons:
+            self.update_boudary_dir(vertices)
         deltaforce=self.force_displace-self.force_last_displace
         itertimes=0
         while 1:
             itertimes=itertimes+1
             if itertimes>500:
-                if deltaforce.norm()<1e-9:
+                if (deltaforce**2).sum()<params.grad_error:
+                    print('locking')
                     deltaforce=0.0*deltaforce
                     break
             
@@ -170,14 +182,14 @@ class ExternalForce(nn.Module):
                 if ForceMaxCondition.sum()!=0:
                     deltaforce=0.8*deltaforce
                     continue
-
-            #Fz2=torch.tensor((self.force[0,:,2]+self.force_last_displace[0,:,2]+deltaforce[0,:,2])**2)
-            """ fz2=(self.force+self.force_last_displace+deltaforce)[:,:,2]**2
-            ForceDirCondition=((fz2/f2)<(self.theta2*(1.0+numerical_error)))
-            if ForceDirCondition.sum()!=0:
-                deltaforce=0.5*deltaforce
-                continue """
-            
+            if params.fdir_cons:
+                forces=self.force+torch.bmm(self.transform,self.force_last_displace+deltaforce)
+                forces_mag=torch.norm(forces,p=2,dim=2).unsqueeze(dim=2).repeat(1,1,3).clone().detach()
+                innerproduct=torch.sum(torch.where(forces_mag>0.95*self.l1_epsilon,self.boundary_dir*forces/forces_mag,1.0),dim=2)
+                ForceDirCondition=(innerproduct+1.0<params.nume_error)
+                if ForceDirCondition.sum()!=0:
+                    deltaforce=0.8*deltaforce
+                    continue
             break
 
         self.force_displace.data=self.force_last_displace+deltaforce
@@ -188,6 +200,10 @@ class ExternalForce(nn.Module):
     def forward(self):
         forces=self.force+torch.bmm(self.transform,self.force_displace)
         zero=torch.tensor([0]).cuda()
+        self.fmax_loss=self.FmaxConstraint(forces)*params.fmax_weight if params.fmax_cons else zero
+        self.fdir_loss=self.FdirConstraint(forces)*params.fdir_weight if params.fdir_cons else zero
+        self.fnorm1_loss=self.FNorm1(forces)*params.fnorm1_weight if params.fnorm1_cons else zero
+        return self.fmax_loss+self.fdir_loss+self.fnorm1_loss
         return ((self.FmaxConstraint(forces)*params.fmax_weight) if params.fmax_cons else zero)\
               +((self.FNorm1(forces)*params.fnorm1_weight) if params.fnorm1_cons else zero)
 

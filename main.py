@@ -63,6 +63,7 @@ class SimulationWidget(QOpenGLWidget):
         #self.sign_one.emit()
 
     def mouseMoveEvent(self, event):
+        return
         dx = event.x() - self.mouse_last_position.x()
         dy = event.y() - self.mouse_last_position.y()
 
@@ -78,6 +79,7 @@ class SimulationWidget(QOpenGLWidget):
         glLoadIdentity()
         gluLookAt(*(list(self.cam_position) + list(self.cam_target) + list(self.cam_up_vector)))
 
+
         #draw triangle mesh
         start=time.perf_counter()
         vertices=self.opt.simu_pos
@@ -87,7 +89,7 @@ class SimulationWidget(QOpenGLWidget):
             glVertex3d(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
             glVertex3d(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3d(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
-        glEnd()
+        glEnd() 
 
         glColor3f(0.0,0.0,0.0)
         glLineWidth(2)
@@ -129,7 +131,7 @@ class SimulationWidget(QOpenGLWidget):
         
         if opt.params.use_forcegrad:
             id=0
-            forces_grad=self.opt.simu_force_grad*rate*5
+            forces_grad=self.opt.simu_force_grad*rate*50
             glLineWidth(2)
             glBegin(GL_LINES)
             glColor3f(0.0,0.0,0.8)
@@ -183,12 +185,17 @@ class SimulationWidget(QOpenGLWidget):
 
     def update_simulation(self):
         delta_time = 0.001  # Time step
-        if self.opt.itertimes>opt.params.max_iter-opt.params.updategl_hz:
+        """ if self.opt.itertimes>opt.params.max_iter-opt.params.updategl_hz:
             return
         if self.opt.small_gradient:
+            return """
+        """ for i in range(0,opt.params.updategl_hz):
+            if self.opt.stop:
+                return
+            self.opt.one_iterate() """
+        if self.opt.stop:
             return
-        for i in range(0,opt.params.updategl_hz):
-            self.opt.one_iterate()
+        self.opt.one_iterate()
         self.update()
         
 
@@ -234,6 +241,7 @@ class MainWindow(QMainWindow):
         self.simulation_widget.mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        return
         self.simulation_widget.mouseMoveEvent(event)
     
     def timerEvent(self, event):

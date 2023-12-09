@@ -1,7 +1,7 @@
 #source file
-template_mesh: obj/hex06.obj
+template_mesh: obj/result.obj
 image:         image/square.png
-info_path:     info/hex_info06.txt
+info_path:     info/hex_info20.txt
 output_dir:    results
 
 #dense file
@@ -33,17 +33,22 @@ NEWTON_RATE:   0.0001
 
 #optimization setting
 STEP_SIZE:     100
-DECAY_GAMMA:   0.98
+DECAY_GAMMA:   0.99
 LEARNING_RATE: 0.001
-MAX_ITER:      20000
+MAX_ITER:      100000
+update_w_hz:   5000
 grad_error:    0.0000001
 nume_error:    0.0000001
+enable_prox:   0
 
 #optimization parameter
-xi:            1.0
-eta:           0.0
-rho:           0.5
-epsilon:       0.0000000001
+l1_xi:         1.0
+l1_eta:        0.0
+l1_rho:        0.5
+l1_epsilon:    0.0000000001
+l1_alpha:      0.2
+l1_beta:       0.5
+
 force_delay:   5.0
 image_weight:  1.0
 fmax_weight:   0.001

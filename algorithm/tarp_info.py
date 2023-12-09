@@ -94,6 +94,7 @@ class tarp_params():
         self.l1_alpha=meta_params['l1_alpha']
         self.l1_beta=meta_params['l1_beta']
         self.force_delay=meta_params['force_delay']
+        self.cosine_delay=meta_params['cosine_delay']
         self.image_weight=meta_params['image_weight']
         self.fmax_weight=meta_params['fmax_weight']
         self.fdir_weight=meta_params['fdir_weight']

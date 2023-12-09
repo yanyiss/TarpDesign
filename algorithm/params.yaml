@@ -1,7 +1,7 @@
 #source file
-template_mesh: obj/result.obj
+template_mesh: obj/hex06.obj
 image:         image/square.png
-info_path:     info/hex_info20.txt
+info_path:     info/hex_info06.txt
 output_dir:    results
 
 #dense file
@@ -10,7 +10,7 @@ forcedis_file: denseInfo/force_displace.txt
 result_mesh:   denseInfo/result.obj
 
 #save file setting
-saveshadow_hz: 20
+saveshadow_hz: 200
 saveloss_hz:   100
 saveresult_hz: 200
 
@@ -18,7 +18,7 @@ saveresult_hz: 200
 IMAGE_SIZE:    128
 SIGMA_VAL:     0.0001
 GAMMA_VAL:     0.00000001
-VIEW_ANGLE:    4  
+VIEW_ANGLE:    4
 VIEW_SCALE:    0.25
 
 #gui
@@ -28,15 +28,15 @@ use_adamgrad:  0
 updategl_hz:   50
 
 #simulation
-BALANCE_COF:   0.000001
-NEWTON_RATE:   0.0001
+BALANCE_COF:   0.1
+NEWTON_RATE:   100
 
 #optimization setting
 STEP_SIZE:     100
-DECAY_GAMMA:   1.0
+DECAY_GAMMA:   0.99
 LEARNING_RATE: 0.001
-MAX_ITER:      200000
-update_w_hz:   10000
+MAX_ITER:      100000
+update_w_hz:   8000
 grad_error:    0.0000000001
 nume_error:    0.000001
 enable_prox:   0
@@ -49,11 +49,12 @@ l1_epsilon:    0.0000000001
 l1_alpha:      0.2
 l1_beta:       0.5
 
-force_delay:   5.0
+force_delay:   10.0
+cosine_delay:  0.05
 image_weight:  1.0
-fmax_weight:   0.001
+fmax_weight:   0.0005
 fdir_weight:   0.001
-fnorm1_weight: 0.0001
+fnorm1_weight: 0.0005
 
 #loss type: image or shadow
 loss_type:     image
