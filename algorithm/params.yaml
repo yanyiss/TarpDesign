@@ -1,7 +1,7 @@
 #source file
-template_mesh: obj/hex06.obj
+template_mesh: obj/hex20.obj
 image:         image/square.png
-info_path:     info/hex_info06.txt
+info_path:     info/hex_info20.txt
 output_dir:    results
 
 #dense file

@@ -68,7 +68,6 @@ def get_mesh_boundary(mesh_dir):
     return torch.from_numpy(index.astype(int)).cuda()
 
 
-
 import yaml
 import configargparse
 import os
@@ -109,6 +108,43 @@ class py_simulation(torch.autograd.Function):
         force_num=int(ctx.jacobi.size(2)/3)
         grad_force_displace=torch.bmm(grad_vertices,ctx.jacobi).reshape(1,force_num,3)
         return grad_force_displace,None
+    
+
+import matplotlib.pyplot as plt
+class LossDrawer():
+    def __init__(self):
+        self.figure_x=[]
+        self.figure_fmax_loss=[]
+        self.figure_fdir_loss=[]
+        self.figure_fnorm1_loss=[]
+        self.figure_shadow_loss=[]
+        self.figure_total_loss=[]
+        plt.ion()
+    
+    def update(self,id,ropeforce,meshrender):
+        fmax_loss_cpu=ropeforce.fmax_loss.clone().detach().cpu().numpy()
+        fdir_loss_cpu=ropeforce.fdir_loss.clone().detach().cpu().numpy()
+        fnorm1_loss_cpu=ropeforce.fnorm1_loss.clone().detach().cpu().numpy()
+        shadow_loss_cpu=meshrender.shadow_loss.clone().detach().cpu().numpy()
+        total_loss_cpu=fmax_loss_cpu+fdir_loss_cpu+fnorm1_loss_cpu+shadow_loss_cpu
+        self.figure_x.append(id)
+        self.figure_fmax_loss.append(fmax_loss_cpu)
+        self.figure_fdir_loss.append(fdir_loss_cpu)
+        self.figure_fnorm1_loss.append(fnorm1_loss_cpu)
+        self.figure_shadow_loss.append(shadow_loss_cpu)
+        self.figure_total_loss.append(total_loss_cpu)
+        plt.clf()
+        plt.plot(self.figure_x,self.figure_total_loss,label="total loss",color='red')
+        plt.plot(self.figure_x,self.figure_shadow_loss,label="shadow loss",color='lightgreen')
+        plt.plot(self.figure_x,self.figure_fnorm1_loss,label="force l1-norm loss",color='peru')
+        plt.plot(self.figure_x,self.figure_fdir_loss,label="force direction barrier loss",color="cyan")
+        plt.plot(self.figure_x,self.figure_fmax_loss,label="force maximum barrier loss",color="magenta")
+        plt.legend(loc="upper right")
+
+    def save_loss(self,result_dir):
+        plt.savefig(os.path.join(result_dir, 'loss.png'))
+
+
 
 from datetime import datetime
 def get_datetime():

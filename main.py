@@ -18,6 +18,7 @@ from OpenGL.GLU import *
 
 #import algorithm.deform as deform
 import algorithm.opt as opt
+import algorithm.newton_raphson as newton_raphson
 """ AXIS_DICT = {
     "X" : [1,0,0],
     "Y" : [0,1,0],
@@ -50,6 +51,7 @@ class SimulationWidget(QOpenGLWidget):
         self.df.set_init_force() """
 
         self.opt=opt.deform()
+        self.newton_raphson=newton_raphson.newton_raphson()
         self.faces=self.opt.tarp.faces[0].clone().detach().cpu().numpy()
 
     
@@ -195,7 +197,8 @@ class SimulationWidget(QOpenGLWidget):
             self.opt.one_iterate() """
         if self.opt.stop:
             return
-        self.opt.one_iterate()
+        #self.opt.one_iterate()
+        self.newton_raphson.one_iterate()
         self.update()
         
 

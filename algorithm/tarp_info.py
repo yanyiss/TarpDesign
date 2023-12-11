@@ -3,7 +3,7 @@ import numpy as np
 import algorithm.tool as tool
 
 class tarp_info():
-    def __init__(self,vertex,data):
+    def __init__(self,vertex,data,params):
 
         batch_size=vertex.size(0)
         self.nv = vertex.size(1)
@@ -39,10 +39,8 @@ class tarp_info():
         #vertex that are forced
         self.C=torch.cat([self.C0,self.C1],dim=0)
         #self.C=0
-        #vertically upward direction
-        #n=np.zeros([batch_size,self.C.size(0),3]).astype(np.float64)
-        #n[:,:,2]=1.0
-        #self.n=torch.from_numpy(n).cuda()
+        boundary_index=tool.get_mesh_boundary(params.template_mesh)
+        self.C=boundary_index
 
 class tarp_params():
     def __init__(self):
@@ -120,7 +118,7 @@ class Tarp():
         self.faces=template_mesh.faces
 
         data=np.loadtxt(params.info_path,dtype=np.float64)
-        self.tarp_info=tarp_info(self.vertices,data)
+        self.tarp_info=tarp_info(self.vertices,data,params)
 
     def get_render_mesh(self):
         return sr.Mesh(self.vertices.repeat(self.batch_size,1,1),self.faces.repeat(self.batch_size,1,1))
