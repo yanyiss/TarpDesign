@@ -1,3 +1,4 @@
+from typing import Any
 import cvxpy as cp
 import numpy as np
 
@@ -54,19 +55,36 @@ def get_mesh_boundary(mesh_dir):
         v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
     return torch.from_numpy(v_index.astype(int)).cuda()
 
-
-    index=np.array([])
+def get_adj(mesh_dir):
+    mesh=openmesh.read_trimesh(mesh_dir)
+    adjcols=9
+    adj=np.zeros((mesh.n_vertices(),adjcols))
+    len=np.zeros((mesh.n_vertices(),adjcols-1))
     for v in mesh.vertices():
-        if mesh.is_boundary(v):
-            index=np.append(index,v.idx())
-    """ index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2)) """
-    """ index[3]=205
-    index[205]=3 """
-    return torch.from_numpy(index.astype(int)).cuda()
+        if mesh.valence(v)>adjcols-1:
+            print('adjcols is too smalle')
+            exit(0)
+        adj[v.idx(),adjcols-1]=mesh.valence(v)
+        i=0
+        """ for vv in mesh.vv(v):
+            adj[v.idx(),i]=vv.idx()
+            len[v.idx(),i]=(mesh.point(v)-mesh.point(vv)).Norm()
+            i=i+1 """
+        for voh in mesh.voh(v):
+            adj[v.idx(),i]=mesh.to_vertex_handle(voh).idx()
+            len[v.idx(),i]=mesh.calc_edge_length(voh)
+            i=i+1
+    return torch.from_numpy(adj.astype(np.int32)).cuda(),torch.from_numpy(len.astype(np.float32)).cuda()
 
+def get_v2f_id(nv,boundary_index):
+    v2f_id=torch.IntTensor(nv).cuda()
+    for i in range(nv):
+        v2f_id[i]=-1
+    it=0
+    for i in range(boundary_index.shape[0]):
+        v2f_id[boundary_index[i]]=it
+        it=it+1
+    return v2f_id
 
 import yaml
 import configargparse
@@ -93,7 +111,7 @@ def read_params():
     meta_params['result_mesh']=os.path.join(data_dir,meta_params['result_mesh'])
     return meta_params
 
-
+import parallel_energy
 class py_simulation(torch.autograd.Function):
     @staticmethod
     def forward(ctx,force_displace,diff_simulator):
@@ -108,6 +126,26 @@ class py_simulation(torch.autograd.Function):
         force_num=int(ctx.jacobi.size(2)/3)
         grad_force_displace=torch.bmm(grad_vertices,ctx.jacobi).reshape(1,force_num,3)
         return grad_force_displace,None
+    
+class balance_energy(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx,vf,nv,nf,adj,len,v2f_id):
+        ctx.vf=vf
+        ctx.nv=nv
+        ctx.nf=nf
+        ctx.adj=adj
+        ctx.len=len
+        ctx.v2f_id=v2f_id
+        ctx.balance_value=torch.zeros(nv*3).cuda()
+        parallel_energy.energy_forward(vf,nv,nf,adj,len,v2f_id,ctx.balance_value)
+        return torch.sum(ctx.balance_value**2)
+    
+    @staticmethod
+    def backward(ctx,grad_loss):
+        vf_grad=torch.zeros((ctx.nv+ctx.nf)*3).cuda()
+        parallel_energy.energy_backward(ctx.vf,ctx.nv,ctx.nf,ctx.adj,ctx.len,ctx.v2f_id,ctx.balance_value,vf_grad)
+        return vf_grad.reshape(ctx.nv+ctx.nf,3).unsqueeze(dim=0),None,None,None,None,None
+        
     
 
 import matplotlib.pyplot as plt

@@ -1,21 +1,17 @@
 import torch
-import torch.nn as nn
 import numpy as np
-
-import algorithm.tarp_info as TI
 import algorithm.tool as tool
-import os
 
 
 class RopeForce:
     def __init__(self,vertices,tarp_info,boundary_index,params):
         
         batch_size=vertices.shape[0]
-        uniquesize=boundary_index.shape[0]-1
+        """ uniquesize=boundary_index.shape[0]-1
         self.transform=torch.zeros((batch_size,uniquesize+1,uniquesize)).cuda()
         for i in range(uniquesize):
             self.transform[:,i,i]=1.0
-            self.transform[:,i+1,i]=-1.0
+            self.transform[:,i+1,i]=-1.0 """
         #transform[:,uniquesize,:]=-1.0
 
         self.tarp_info=tarp_info
@@ -32,7 +28,8 @@ class RopeForce:
         self.fdir_loss=0
         self.fnorm1_loss=0
         self.force=self.get_init_force(vertices,boundary_index)
-        self.nf=self.force.shape[1]-1
+        self.nf=self.force.shape[1]
+        self.boundary_index=boundary_index
         #self.update_weight()
     
     def get_init_force(self,vertices,boundary_index):
@@ -49,7 +46,7 @@ class RopeForce:
         return torch.from_numpy(f.astype(np.float32)).cuda()
         
     def now_force(self,force_displace):
-        return self.force+torch.bmm(self.transform,force_displace[:,-self.nf:,:])
+        return self.force+force_displace[:,-self.nf:,:]
     
     def update_boudary_dir(self,vertices):
         self.boundary_dir=vertices[:,self.tarp_info.C,:]-vertices[:,self.tarp_info.CI,:]

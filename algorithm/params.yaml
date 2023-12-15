@@ -55,6 +55,7 @@ image_weight:  1.0
 fmax_weight:   0.0005
 fdir_weight:   0.001
 fnorm1_weight: 0.0005
+balan_weight:  1.0
 
 #loss type: image or shadow
 loss_type:     image
