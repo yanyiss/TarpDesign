@@ -17,7 +17,7 @@ class tarp_info():
         #gravity acceleration        unit: m/(s^2)
         self.g=torch.tensor(data[3]).cuda()
         #gravity                     unit: N
-        G=np.zeros([batch_size,self.nv,3]).astype(np.float64)
+        G=np.zeros([batch_size,self.nv,3]).astype(np.float32)
         G[:,:,2]=-data[2]*data[3]/self.nv
         self.G=torch.from_numpy(G).cuda()
         #maximum force on the rope   unit: N
@@ -70,7 +70,8 @@ class tarp_params():
         #gui
         self.use_vertgrad=meta_params['use_vertgrad']
         self.use_forcegrad=meta_params['use_forcegrad']
-        self.use_adamgrad=meta_params['use_adamgrad']
+        self.use_voptgrad=meta_params['use_voptgrad']
+        self.use_foptgrad=meta_params['use_foptgrad']
         self.updategl_hz=meta_params['updategl_hz']
         #simulation
         self.balance_cof=meta_params['BALANCE_COF']
@@ -97,6 +98,9 @@ class tarp_params():
         self.fmax_weight=meta_params['fmax_weight']
         self.fdir_weight=meta_params['fdir_weight']
         self.fnorm1_weight=meta_params['fnorm1_weight']
+        self.bal_weight=meta_params['bal_weight']
+        self.rf_weight=meta_params['rf_weight']
+        self.fixed_weight=meta_params['fixed_weight']
         #loss type
         self.loss_type=meta_params['loss_type']
         self.fmax_cons=meta_params['fmax_cons']

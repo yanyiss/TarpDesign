@@ -129,22 +129,23 @@ class py_simulation(torch.autograd.Function):
     
 class balance_energy(torch.autograd.Function):
     @staticmethod
-    def forward(ctx,vf,nv,nf,adj,len,v2f_id):
+    def forward(ctx,vf,mg,nv,nf,adj,len,v2f_id,weight):
         ctx.vf=vf
         ctx.nv=nv
         ctx.nf=nf
         ctx.adj=adj
         ctx.len=len
         ctx.v2f_id=v2f_id
+        ctx.weight=weight
         ctx.balance_value=torch.zeros(nv*3).cuda()
-        parallel_energy.energy_forward(vf,nv,nf,adj,len,v2f_id,ctx.balance_value)
-        return torch.sum(ctx.balance_value**2)
+        parallel_energy.energy_forward(vf,mg,nv,nf,adj,len,v2f_id,ctx.balance_value)
+        return torch.sum(ctx.balance_value**2)*weight
     
     @staticmethod
     def backward(ctx,grad_loss):
         vf_grad=torch.zeros((ctx.nv+ctx.nf)*3).cuda()
         parallel_energy.energy_backward(ctx.vf,ctx.nv,ctx.nf,ctx.adj,ctx.len,ctx.v2f_id,ctx.balance_value,vf_grad)
-        return vf_grad.reshape(ctx.nv+ctx.nf,3).unsqueeze(dim=0),None,None,None,None,None
+        return vf_grad.reshape(ctx.nv+ctx.nf,3).unsqueeze(dim=0)*ctx.weight,None,None,None,None,None,None,None
         
     
 
@@ -155,34 +156,74 @@ class LossDrawer():
         self.figure_fmax_loss=[]
         self.figure_fdir_loss=[]
         self.figure_fnorm1_loss=[]
+        self.figure_fglobal_loss=[]
+        self.figure_flocal_loss=[]
         self.figure_shadow_loss=[]
         self.figure_total_loss=[]
         plt.ion()
     
+    def truncate(self,loss):
+        return min(loss.clone().detach().cpu().numpy(),0.1)
+    
     def update(self,id,ropeforce,meshrender):
-        fmax_loss_cpu=ropeforce.fmax_loss.clone().detach().cpu().numpy()
-        fdir_loss_cpu=ropeforce.fdir_loss.clone().detach().cpu().numpy()
-        fnorm1_loss_cpu=ropeforce.fnorm1_loss.clone().detach().cpu().numpy()
-        shadow_loss_cpu=meshrender.shadow_loss.clone().detach().cpu().numpy()
-        total_loss_cpu=fmax_loss_cpu+fdir_loss_cpu+fnorm1_loss_cpu+shadow_loss_cpu
+        fmax_loss_cpu=self.truncate(ropeforce.fmax_loss)
+        fdir_loss_cpu=self.truncate(ropeforce.fdir_loss)
+        fnorm1_loss_cpu=self.truncate(ropeforce.fnorm1_loss)
+        fglobal_loss_cpu=self.truncate(ropeforce.global_balance_loss)
+        flocal_loss_cpu=self.truncate(ropeforce.local_balance_loss)
+        shadow_loss_cpu=self.truncate(meshrender.shadow_loss)
+        total_loss_cpu=fmax_loss_cpu+fdir_loss_cpu+fnorm1_loss_cpu+fglobal_loss_cpu+flocal_loss_cpu+shadow_loss_cpu
         self.figure_x.append(id)
         self.figure_fmax_loss.append(fmax_loss_cpu)
         self.figure_fdir_loss.append(fdir_loss_cpu)
         self.figure_fnorm1_loss.append(fnorm1_loss_cpu)
+        self.figure_fglobal_loss.append(fglobal_loss_cpu)
+        self.figure_flocal_loss.append(flocal_loss_cpu)
         self.figure_shadow_loss.append(shadow_loss_cpu)
         self.figure_total_loss.append(total_loss_cpu)
+        print('total,shadow,l1,dir,max,global,local')
+        print(total_loss_cpu,shadow_loss_cpu,fnorm1_loss_cpu,fdir_loss_cpu,fmax_loss_cpu,fglobal_loss_cpu,flocal_loss_cpu)
+        print(meshrender.shadow_loss)
+        print(ropeforce.global_balance_loss)
+        print(ropeforce.local_balance_loss)
         plt.clf()
         plt.plot(self.figure_x,self.figure_total_loss,label="total loss",color='red')
         plt.plot(self.figure_x,self.figure_shadow_loss,label="shadow loss",color='lightgreen')
         plt.plot(self.figure_x,self.figure_fnorm1_loss,label="force l1-norm loss",color='peru')
         plt.plot(self.figure_x,self.figure_fdir_loss,label="force direction barrier loss",color="cyan")
         plt.plot(self.figure_x,self.figure_fmax_loss,label="force maximum barrier loss",color="magenta")
+        plt.plot(self.figure_x,self.figure_fglobal_loss,label="global balance loss",color='purple')
+        plt.plot(self.figure_x,self.figure_flocal_loss,label="local balance loss",color='orange')
         plt.legend(loc="upper right")
 
     def save_loss(self,result_dir):
         plt.savefig(os.path.join(result_dir, 'loss.png'))
 
+class GUIInfo():
+    def __init__(self,vf,faces,boundary_index,nv,nf,params):
+        self.nv=nv
+        self.nf=nf
+        self.vertices=vf[0,0:nv,:].clone().detach().cpu().numpy()
+        self.forces=vf[0,-nf:,:].clone().detach().cpu().numpy()
+        self.vertices_grad=0
+        self.forces_grad=0
+        self.vertices_optgrad=0
+        self.forces_optgrad=0
+        self.faces=faces[0].clone().detach().cpu().numpy()
+        self.boundary_index=boundary_index.clone().detach().cpu().numpy()
+        self.params=params
 
+    def update(self,vf,vf_grad,opt_grad):
+        self.vertices=vf[0,0:self.nv,:].clone().detach().cpu().numpy()
+        self.forces=vf[0,-self.nf:,:].clone().detach().cpu().numpy()
+        if self.params.use_vertgrad:
+            self.vertices_grad=vf_grad[0,0:self.nv,:].clone().detach().cpu().numpy()
+        if self.params.use_forcegrad:
+            self.forces_grad=vf_grad[0,-self.nf:,:].clone().detach().cpu().numpy()
+        if self.params.use_voptgrad:
+            self.vertices_optgrad=opt_grad[0,0:self.nv,:].clone().detach().cpu().numpy()
+        if self.params.use_foptgrad:
+            self.forces_optgrad=opt_grad[0,-self.nf:,:].clone().detach().cpu().numpy()
 
 from datetime import datetime
 def get_datetime():

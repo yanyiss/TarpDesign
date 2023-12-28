@@ -22,24 +22,27 @@ def ev(x):
 def main():
     
  
-    x = torch.ones(4)
+    """ x = torch.ones(4)
     x.requires_grad_()
 
     y = x[0]**2+x[1]**3+x[2]**4+x[3]**5
-    grad = torch.autograd.grad(outputs=y, inputs=x, grad_outputs=torch.ones_like(y), create_graph=True)[0]
+    grad = torch.autograd.grad(outputs=y, inputs=x, grad_outputs=torch.ones_like(y), create_graph=True)[0] """
     #grad2=torch.zeros((2,2,1,2,2))
     #grad2[:,:,:,0:2,0:2] = torch.autograd.grad(outputs=grad[:,:,:], inputs=x, grad_outputs=torch.ones_like(grad[:,:,:]))[0]
     #grad2[:,:,:,0:2,0:2] = torch.autograd.grad(outputs=grad[:,:,:], inputs=x, grad_outputs=torch.ones_like(grad[:,:,:]))[0]
     #grad2=torch.autograd.grad(outputs=grad,inputs=x,grad_outputs=torch.ones_like(grad))[0]
 
-    grad2=torch.zeros((4,4))
+    #grad2=torch.zeros((4,4))
     """ for i in range(4):
         grad2[i,0:4]=torch.autograd.grad(outputs=grad[i],inputs=x,grad_outputs=torch.ones_like(grad[i]),retain_graph=True)[0] """
     
     
-    print(grad)
-    print(grad2)
-
+    #print(grad)
+    #print(grad2)
+    x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
+    print(x)
+    print(x[0].t().sum(dim=1))
+    print((x[0].t().sum(dim=1)**2).sum())
     """ x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
     print(x.shape)
     y=x[:,0:3,:]

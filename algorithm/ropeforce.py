@@ -4,7 +4,7 @@ import algorithm.tool as tool
 
 
 class RopeForce:
-    def __init__(self,vertices,tarp_info,boundary_index,params):
+    def __init__(self,vertices,faces,tarp_info,boundary_index,params):
         
         batch_size=vertices.shape[0]
         """ uniquesize=boundary_index.shape[0]-1
@@ -15,6 +15,7 @@ class RopeForce:
         #transform[:,uniquesize,:]=-1.0
 
         self.tarp_info=tarp_info
+        self.mg=tarp_info.G[0,0,:]*vertices.shape[1]
         if self.tarp_info.Fmax<params.force_delay:
             print('too big force delay')
             exit(0)
@@ -27,10 +28,27 @@ class RopeForce:
         self.fmax_loss=0
         self.fdir_loss=0
         self.fnorm1_loss=0
+        self.global_balance_loss=0
+        self.local_balance_loss=0
         self.force=self.get_init_force(vertices,boundary_index)
         self.nf=self.force.shape[1]
         self.boundary_index=boundary_index
-        #self.update_weight()
+
+        self.nv=vertices.shape[1]
+        adj=np.zeros([1,self.nv,self.nv]).astype(np.float32)
+        faces_numpy=faces[0].cpu()
+        adj[0,faces_numpy[:,0],faces_numpy[:,1]]=1
+        adj[0,faces_numpy[:,1],faces_numpy[:,0]]=1
+        adj[0,faces_numpy[:,1],faces_numpy[:,2]]=1
+        adj[0,faces_numpy[:,2],faces_numpy[:,1]]=1
+        adj[0,faces_numpy[:,2],faces_numpy[:,0]]=1
+        adj[0,faces_numpy[:,0],faces_numpy[:,2]]=1
+        self.adj=torch.from_numpy(adj).cuda()
+
+        self.ori_len=torch.sqrt( (vertices[:,:,0]-vertices[:,:,0].reshape(batch_size,self.nv,1))**2
+                                +(vertices[:,:,1]-vertices[:,:,1].reshape(batch_size,self.nv,1))**2
+                                +(vertices[:,:,2]-vertices[:,:,2].reshape(batch_size,self.nv,1))**2
+                                +torch.eye(self.nv).unsqueeze(dim=0).cuda())
     
     def get_init_force(self,vertices,boundary_index):
         val=tool.force_SOCP(vertices[0],boundary_index,self.tarp_info.CI,
@@ -46,7 +64,7 @@ class RopeForce:
         return torch.from_numpy(f.astype(np.float32)).cuda()
         
     def now_force(self,force_displace):
-        return self.force+force_displace[:,-self.nf:,:]
+        return force_displace[:,-self.nf:,:]
     
     def update_boudary_dir(self,vertices):
         self.boundary_dir=vertices[:,self.tarp_info.C,:]-vertices[:,self.tarp_info.CI,:]
@@ -73,7 +91,25 @@ class RopeForce:
     
     def FNorm1(self,forces):
         force_magnitude=torch.sqrt((forces**2).sum(dim=2)+self.params.l1_epsilon)
-        return (force_magnitude*self.weight).sum()
+        return torch.sum(force_magnitude*self.weight)
+    
+    def GlobalBalance(self,forces):
+        return torch.sum((forces[0].t().sum(dim=1)+self.mg)**2)
+    
+    def LocalBalance(self,vf,forces):
+        batch_size=vf.shape[0]
+        vertices=vf[:,0:self.nv,:]
+        newlen=torch.sqrt( (vertices[:,:,0]-vertices[:,:,0].reshape(batch_size,self.nv,1))**2
+                          +(vertices[:,:,1]-vertices[:,:,1].reshape(batch_size,self.nv,1))**2
+                          +(vertices[:,:,2]-vertices[:,:,2].reshape(batch_size,self.nv,1))**2
+                          +torch.eye(self.nv).unsqueeze(dim=0).cuda())
+        weight=self.tarp_info.k*(newlen-self.ori_len)/newlen*self.adj
+        r,c=np.diag_indices(weight.size(1))
+        weight[0,r,c]=-weight[0].sum(1)
+        x=torch.matmul(weight,vertices)
+        x[:,self.boundary_index,:]=x[:,self.boundary_index,:]+forces
+        x[:,:,2]=x[:,:,2]-self.tarp_info.mass*self.tarp_info.g/self.nv
+        return torch.sum(x**2)
     
     """ def linesearch(self,vertices):
         if params.fmax_cons+params.fdir_cons==0:
@@ -114,8 +150,10 @@ class RopeForce:
 
     def loss_evaluation(self,force_displace):
         forces=self.now_force(force_displace)
-        zero=torch.tensor([0]).cuda()
+        zero=torch.tensor([0.0]).cuda()
         self.fmax_loss=self.FmaxConstraint(forces)*self.params.fmax_weight if self.params.fmax_cons else zero
         self.fdir_loss=self.FdirConstraint(forces)*self.params.fdir_weight if self.params.fdir_cons else zero
         self.fnorm1_loss=self.FNorm1(forces)*self.params.fnorm1_weight if self.params.fnorm1_cons else zero
-        return self.fmax_loss+self.fdir_loss+self.fnorm1_loss
+        self.global_balance_loss=self.GlobalBalance(forces)*self.params.rf_weight*0.1
+        self.local_balance_loss=self.LocalBalance(force_displace,forces)*0.01
+        return self.fmax_loss+self.fdir_loss+self.fnorm1_loss+self.global_balance_loss+self.local_balance_loss

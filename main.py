@@ -16,8 +16,6 @@ from Solids.Plane import Plane """
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-#import algorithm.deform as deform
-import algorithm.opt as opt
 import algorithm.newton_raphson as newton_raphson
 """ AXIS_DICT = {
     "X" : [1,0,0],
@@ -50,9 +48,8 @@ class SimulationWidget(QOpenGLWidget):
         self.faces=self.df.model.template_mesh.faces[0].clone().detach().cpu().numpy()
         self.df.set_init_force() """
 
-        self.opt=opt.deform()
         self.newton_raphson=newton_raphson.newton_raphson()
-        self.faces=self.opt.tarp.faces[0].clone().detach().cpu().numpy()
+        self.gui_info=self.newton_raphson.gui_info
 
     
     def mousePressEvent(self, event):
@@ -83,11 +80,11 @@ class SimulationWidget(QOpenGLWidget):
 
 
         #draw triangle mesh
-        start=time.perf_counter()
-        vertices=self.opt.simu_pos
+        vertices=self.gui_info.vertices
+        faces=self.gui_info.faces
         glColor3f(1.0,1.0,0.0)
         glBegin(GL_TRIANGLES)
-        for face in self.faces:
+        for face in faces:
             glVertex3d(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
             glVertex3d(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3d(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
@@ -96,7 +93,7 @@ class SimulationWidget(QOpenGLWidget):
         glColor3f(0.0,0.0,0.0)
         glLineWidth(2)
         glBegin(GL_LINES)
-        for face in self.faces:
+        for face in faces:
             glVertex3f(vertices[face[0]][0],vertices[face[0]][1],vertices[face[0]][2])
             glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
@@ -106,8 +103,9 @@ class SimulationWidget(QOpenGLWidget):
         glEnd()
 
         #draw vertices grad
-        if opt.params.use_vertgrad:
-            vertices_end=self.opt.simu_vertices_grad*1000+vertices
+        if newton_raphson.params.use_vertgrad:
+            #vertices_end=self.opt.simu_vertices_grad*1000+vertices
+            vertices_end=self.gui_info.vertices_grad*0.01+vertices
             glColor3f(1.0,0.0,1.0)
             glLineWidth(2)
             glBegin(GL_LINES)
@@ -116,44 +114,44 @@ class SimulationWidget(QOpenGLWidget):
                 glVertex3f(vertices_end[i][0],vertices_end[i][1],vertices_end[i][2])
             glEnd()
         
-        index=self.opt.simu_index
+        boundary_index=self.gui_info.boundary_index
         rate=0.8
-        forces=self.opt.simu_force*rate
+        forces=self.gui_info.forces*rate
         
         #draw current force
         id=0
         glLineWidth(2)
         glBegin(GL_LINES)
         glColor3f(0.7,0.0,0.0)
-        for i in index:
+        for i in boundary_index:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
             glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
             id=id+1
         glEnd()
         
-        if opt.params.use_forcegrad:
+        """ if newton_raphson.params.use_forcegrad:
             id=0
-            forces_grad=self.opt.simu_force_grad*rate*50
+            forces_grad=self.gui_info.forces_grad*rate*50
             glLineWidth(2)
             glBegin(GL_LINES)
             glColor3f(0.0,0.0,0.8)
-            for i in index:
+            for i in boundary_index:
                 glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
                 glVertex3f(vertices[i][0]+forces_grad[id][0],vertices[i][1]+forces_grad[id][1],vertices[i][2]+forces_grad[id][2])
                 id=id+1
-            glEnd()
+            glEnd() """
 
-        if opt.params.use_adamgrad:
+        """ if newton_raphson.params.use_adamgrad:
             id=0
             equa_forces_grad=self.opt.simu_equa_force_grad*rate*1
             glLineWidth(2)
             glBegin(GL_LINES)
             glColor3f(0.0,0.8,0.0)
-            for i in index:
+            for i in boundary_index:
                 glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
                 glVertex3f(vertices[i][0]+equa_forces_grad[id][0],vertices[i][1]+equa_forces_grad[id][1],vertices[i][2]+equa_forces_grad[id][2])
                 id=id+1
-            glEnd()
+            glEnd() """
 
         #draw max force
         """ forcemax=(self.opt.tarp.tarp_info.Fmax*rate).clone().detach().cpu().numpy()
@@ -195,8 +193,6 @@ class SimulationWidget(QOpenGLWidget):
             if self.opt.stop:
                 return
             self.opt.one_iterate() """
-        if self.opt.stop:
-            return
         #self.opt.one_iterate()
         self.newton_raphson.one_iterate()
         self.update()

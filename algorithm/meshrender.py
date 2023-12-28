@@ -32,7 +32,7 @@ class MeshRender():
         imageio.imsave(os.path.join(result_dir,'deform_%05d.png'%id),(255*image).astype(np.uint8))
 
     def loss_evaluation(self,vertice_displace):
-        self.tarp.vertices=self.vertices+vertice_displace[:,0:self.nv,:]
+        self.tarp.vertices=vertice_displace[:,0:self.nv,:]
         mesh=self.tarp.get_render_mesh()
         mesh=self.lighting(mesh)
         mesh=self.transform(mesh)

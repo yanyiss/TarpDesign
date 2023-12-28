@@ -22,9 +22,10 @@ VIEW_ANGLE:    4
 VIEW_SCALE:    0.25
 
 #gui
-use_vertgrad:  0
-use_forcegrad: 0
-use_adamgrad:  0
+use_vertgrad:  1
+use_forcegrad: 1
+use_voptgrad:  0
+use_foptgrad:  0
 updategl_hz:   50
 
 #simulation
@@ -51,17 +52,19 @@ l1_beta:       0.5
 
 force_delay:   10.0
 cosine_delay:  0.05
-image_weight:  1.0
+image_weight:  10.0
 fmax_weight:   0.0005
 fdir_weight:   0.001
 fnorm1_weight: 0.0005
-balan_weight:  1.0
+bal_weight:    1.0
+rf_weight:     1.0
+fixed_weight:  10.0
 
 #loss type: image or shadow
 loss_type:     image
-fmax_cons:     1
+fmax_cons:     0
 fdir_cons:     0
-fnorm1_cons:   1
+fnorm1_cons:   0
 
 #other
 batch_size:    1
