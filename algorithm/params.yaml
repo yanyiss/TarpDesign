@@ -1,7 +1,7 @@
 #source file
-template_mesh: obj/hex20.obj
+template_mesh: obj/hex06.obj
 image:         image/square.png
-info_path:     info/hex_info20.txt
+info_path:     info/hex_info06.txt
 output_dir:    results
 
 #dense file
@@ -29,15 +29,15 @@ use_foptgrad:  0
 updategl_hz:   50
 
 #simulation
-BALANCE_COF:   0.1
-NEWTON_RATE:   100
+BALANCE_COF:   0.0001
+NEWTON_RATE:   0.000001
 
 #optimization setting
 STEP_SIZE:     100
 DECAY_GAMMA:   0.99
 LEARNING_RATE: 0.001
 MAX_ITER:      100000
-update_w_hz:   8000
+update_w_hz:   2500
 grad_error:    0.0000000001
 nume_error:    0.000001
 enable_prox:   0
@@ -55,16 +55,16 @@ cosine_delay:  0.05
 image_weight:  10.0
 fmax_weight:   0.0005
 fdir_weight:   0.001
-fnorm1_weight: 0.0005
+fnorm1_weight: 0.001
 bal_weight:    1.0
-rf_weight:     1.0
+rf_weight:     10.0
 fixed_weight:  10.0
 
 #loss type: image or shadow
 loss_type:     image
 fmax_cons:     0
 fdir_cons:     0
-fnorm1_cons:   0
+fnorm1_cons:   1
 
 #other
 batch_size:    1

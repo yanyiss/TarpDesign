@@ -109,6 +109,9 @@ class RopeForce:
         x=torch.matmul(weight,vertices)
         x[:,self.boundary_index,:]=x[:,self.boundary_index,:]+forces
         x[:,:,2]=x[:,:,2]-self.tarp_info.mass*self.tarp_info.g/self.nv
+        """ print('python')
+        print(vertices)
+        print(x) """
         return torch.sum(x**2)
     
     """ def linesearch(self,vertices):
@@ -154,6 +157,6 @@ class RopeForce:
         self.fmax_loss=self.FmaxConstraint(forces)*self.params.fmax_weight if self.params.fmax_cons else zero
         self.fdir_loss=self.FdirConstraint(forces)*self.params.fdir_weight if self.params.fdir_cons else zero
         self.fnorm1_loss=self.FNorm1(forces)*self.params.fnorm1_weight if self.params.fnorm1_cons else zero
-        self.global_balance_loss=self.GlobalBalance(forces)*self.params.rf_weight*0.1
-        self.local_balance_loss=self.LocalBalance(force_displace,forces)*0.01
+        self.global_balance_loss=self.GlobalBalance(forces)*self.params.rf_weight
+        self.local_balance_loss=self.LocalBalance(force_displace,forces)*0.000001
         return self.fmax_loss+self.fdir_loss+self.fnorm1_loss+self.global_balance_loss+self.local_balance_loss

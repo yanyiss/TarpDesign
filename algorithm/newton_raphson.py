@@ -9,6 +9,7 @@ import algorithm.tarp_info as TI
 import algorithm.tool as tool
 import algorithm.meshrender as meshrender
 import algorithm.ropeforce as ropeforce
+from algorithm.balance_solver import *
 
 params=TI.tarp_params()
 
@@ -24,6 +25,17 @@ class newton_raphson(nn.Module):
         self.adj,self.len=tool.get_adj(params.template_mesh)
         self.v2f_id=tool.get_v2f_id(self.meshrender.nv,self.boundary_index)
         self.loss_drawer=tool.LossDrawer()
+        self.balance_solver=balance_solver()
+        self.balance_solver.set_info(
+            self.tarp.faces[0].clone().detach().cpu().numpy(),
+            self.tarp.vertices[0].clone().detach().cpu().numpy().flatten(),
+            self.boundary_index.clone().detach().cpu().numpy(),
+            self.tarp.tarp_info.k.clone().detach().cpu().numpy(),
+            0.1,
+            self.tarp.tarp_info.mass.clone().detach().cpu().numpy(),
+            self.tarp.tarp_info.CI.clone().detach().cpu().numpy()
+        )
+        self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_cof,params.newton_rate)
         self.itertimes=0
 
         para_dir=str(tool.get_datetime())+' '+str(self.tarp.tarp_info.C.shape[0])+' '+str(params.balance_cof)\
@@ -39,15 +51,24 @@ class newton_raphson(nn.Module):
         self.register_buffer("vf_last_displace",nn.Parameter(torch.zeros_like(vf)).cuda())
 
         self.ropeforce.update_weight(vf)
-        #self.optimizer = torch.optim.Adam(self.parameters(), lr=params.learning_rate)
-        self.optimizer=torch.optim.LBFGS(self.parameters())
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=params.learning_rate)
+        #self.optimizer=torch.optim.LBFGS(self.parameters())
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=params.step_size,gamma=params.decay_gamma)
         self.gui_info = tool.GUIInfo(vf,self.tarp.faces,self.boundary_index,self.meshrender.nv,self.ropeforce.nf,params)
 
+        self.balance_solver.set_forces((self.ropeforce.force+self.vf_displace[:,-self.ropeforce.nf:,:]).clone().detach().cpu().numpy().flatten())
+        now_balance=self.balance_solver.compute_balance_result()
+        while(now_balance>0.001):
+            self.balance_solver.compute_balance()
+            v_dis=self.vf_displace.clone().detach()
+            v_dis[:,0:self.meshrender.nv,:]=torch.from_numpy(self.balance_solver.v.reshape(1,self.meshrender.nv,3)).cuda()-self.meshrender.vertices
+            self.vf_displace.data=v_dis
+            now_balance=self.balance_solver.compute_balance_result()
+
     def one_iterate(self):
-        """ vf=torch.zeros_like(self.vf_displace).cuda()
+        vf=torch.zeros_like(self.vf_displace).cuda()
         vf[:,0:self.meshrender.nv,:]=self.meshrender.vertices+self.vf_displace[:,0:self.meshrender.nv,:]
-        vf[:,-self.ropeforce.nf:,:]=self.ropeforce.force#+self.vf_displace[:,-self.ropeforce.nf:,:]
+        vf[:,-self.ropeforce.nf:,:]=self.ropeforce.force+self.vf_displace[:,-self.ropeforce.nf:,:]
 
         shadow_loss=self.meshrender.loss_evaluation(vf)
         force_loss=self.ropeforce.loss_evaluation(vf)
@@ -55,11 +76,19 @@ class newton_raphson(nn.Module):
         #balance_loss=tool.balance_energy.apply(vf,self.tarp.tarp_info.G[0,0,:],
         #                                        self.meshrender.nv,self.ropeforce.nf,self.adj,self.len,self.v2f_id,params.bal_weight)
         #total_loss=shadow_loss+force_loss+balance_loss
-        total_loss=force_loss#+balance_loss
+        total_loss=shadow_loss+force_loss#+balance_loss
         #print(force_loss,balance_loss)
-        total_loss.backward() """
-
-
+        total_loss.backward()
+        """ self.balance_solver.set_forces((self.ropeforce.force+self.vf_displace[:,-self.ropeforce.nf:,:]).clone().detach().cpu().numpy().flatten())
+        now_balance=self.balance_solver.compute_balance_result()
+        if now_balance>0.0001:
+            self.balance_solver.compute_balance()
+            v_dis=self.vf_displace.clone().detach()
+            v_dis[:,0:self.meshrender.nv,:]=torch.from_numpy(self.balance_solver.v.reshape(1,self.meshrender.nv,3)).cuda()-self.meshrender.vertices
+            self.vf_displace.data=v_dis
+            now_balance=self.balance_solver.compute_balance_result()
+        if now_balance>0.0001:
+            return """
 
         def closure():
             self.optimizer.zero_grad()
@@ -71,6 +100,9 @@ class newton_raphson(nn.Module):
 
             shadow_loss=self.meshrender.loss_evaluation(vf)
             force_loss=self.ropeforce.loss_evaluation(vf)
+            #self.ropeforce.local_balance_loss=torch.tensor([0]).cuda()#tool.balance_energy.apply(vf,self.tarp.tarp_info.G[0,0,:],
+            #                                   self.meshrender.nv,self.ropeforce.nf,self.adj,self.len,self.v2f_id,params.bal_weight)
+            #print('local',self.ropeforce.local_balance_loss)
             #balance_loss=tool.balance_energy.apply(vf,self.tarp.tarp_info.G[0,0,:],
             #                                   self.meshrender.nv,self.ropeforce.nf,self.adj,self.len,self.v2f_id,params.bal_weight)
             total_loss=shadow_loss+force_loss#+balance_loss

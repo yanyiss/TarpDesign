@@ -163,7 +163,7 @@ class LossDrawer():
         plt.ion()
     
     def truncate(self,loss):
-        return min(loss.clone().detach().cpu().numpy(),0.1)
+        return min(loss.clone().detach().cpu().numpy(),1)
     
     def update(self,id,ropeforce,meshrender):
         fmax_loss_cpu=self.truncate(ropeforce.fmax_loss)
