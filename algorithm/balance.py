@@ -1,5 +1,5 @@
 
-hessians = torch.tensor([]).cuda()
+""" hessians = torch.tensor([]).cuda()
 hessians = torch.cat((hessians, torch.autograd.grad(
     outputs=gradients[:, :1],
     inputs=input_points,
@@ -24,7 +24,7 @@ hessians = torch.cat((hessians, torch.autograd.grad(
     retain_graph=True,
     only_inputs=True)[0]), dim=1
                      )
-hessians = torch.reshape(hessians, (hessians.size()[0], 3, -1))
+hessians = torch.reshape(hessians, (hessians.size()[0], 3, -1)) """
 
 """ import pycuda.driver as cuda
 import pycuda.autoinit
@@ -68,25 +68,51 @@ cb=cupy.array([2,3,4],dtype=cupy.float64)
 cc=cupy.linalg.solve(ca,cb)
 print(cc) """
 
-
+""" from scipy import linalg
 from scipy.sparse import coo_matrix, linalg as sla
 row=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/row.txt',dtype=np.int64)
 col=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/col.txt',dtype=np.int64)
 value=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/value.txt',dtype=np.float64)
 right=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/right.txt',dtype=np.float64)
+wideright=np.zeros((right.shape[0],100))
+#wideright[0:right.shape[0],:]=right[:] """
 
-""" from cupyx.scipy.sparse import coo_matrix, linalg as sla
+from cupyx.scipy.sparse import coo_matrix,csr_matrix, linalg as sla
 row=cupy.asarray(np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/row.txt',dtype=np.int64))
 col=cupy.asarray(np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/col.txt',dtype=np.int64))
 value=cupy.asarray(np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/value.txt',dtype=np.float64))
-right=cupy.asarray(np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/right.txt',dtype=np.float64)) """
+right=cupy.asarray(np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/right.txt',dtype=np.float64))
+wideright=cupy.zeros((right.shape[0],200))
+for i in range(200):
+    wideright[:,i]=right
 
+""" A=np.zeros((right.shape[0],right.shape[0]))
+for i in range(row.shape[0]):
+    A[row[i],col[i]]=value[i]
+alu=linalg.lu(A) """
+
+
+start_1=time.perf_counter()
 left=coo_matrix((value,(row,col)),shape=(right.shape[0],right.shape[0]))
-start=time.perf_counter()
-for i in range(100):
-    lu=sla.SuperLU(left)
-    x=lu.solve(right)
-print(time.perf_counter()-start)
+#left=csr_matrix(left)
+lefttemp=coo_matrix((value,(row,col)),shape=(right.shape[0],right.shape[0]))
+#lefttemp=csr_matrix(lefttemp)
+print('-1',time.perf_counter()-start_1)
+
+""" start0=time.perf_counter()
+x=sla.spsolve(left,right)
+print('0',time.perf_counter()-start0) """
+
+start1=time.perf_counter()
+lu=sla.splu(lefttemp)
+print('1',time.perf_counter()-start1)
+
+start2=time.perf_counter()
+y=lu.solve(wideright)
+print('2',time.perf_counter()-start2)
+""" for i in range(10):
+    lu=sla.splu(left)
+    x=lu.solve(wideright) """
 """ left=np.zeros(int(row.shape[0])*3,dtype=np.float64)
 left=left.reshape(int(row.shape[0]),3)
 left[:,0]=row[:]

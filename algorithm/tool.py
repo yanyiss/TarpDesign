@@ -97,10 +97,11 @@ def read_params():
 
 class py_simulation(torch.autograd.Function):
     @staticmethod
-    def forward(ctx,force_displace,diff_simulator):
+    def forward(ctx,force_displace,diff_simulator,jacobi):
         v_size=int(diff_simulator.v.size/3)
         vertices=diff_simulator.v.reshape(v_size,3).astype(np.float32)
-        ctx.jacobi=torch.from_numpy(diff_simulator.jacobi.astype(np.float32)).unsqueeze(dim=0).cuda()
+        #ctx.jacobi=torch.from_numpy(diff_simulator.jacobi.astype(np.float32)).unsqueeze(dim=0).cuda()
+        ctx.jacobi=jacobi
         return torch.from_numpy(vertices).unsqueeze(dim=0).cuda()
     
     @staticmethod
@@ -108,7 +109,28 @@ class py_simulation(torch.autograd.Function):
         grad_vertices=grad_vertices.reshape(1,1,grad_vertices.size(1)*3)
         force_num=int(ctx.jacobi.size(2)/3)
         grad_force_displace=torch.bmm(grad_vertices,ctx.jacobi).reshape(1,force_num,3)
-        return grad_force_displace,None
+        return grad_force_displace,None,None
+
+import cupy
+from cupyx.scipy.sparse import coo_matrix,csr_matrix, linalg as sla
+from torch.utils.dlpack import to_dlpack
+from torch.utils.dlpack import from_dlpack
+import time
+def compute_jacobi(row,col,val,right):
+    curow=cupy.asarray(row)
+    cucol=cupy.asarray(col)
+    cuval=cupy.asarray(val.astype(np.float32))
+    left=coo_matrix((cuval,(curow,cucol)),shape=(right.shape[0],right.shape[0]))
+    lu=sla.splu(left)
+    x=lu.solve(right)
+    return from_dlpack(x.toDlpack()).unsqueeze(dim=0)
+
+def compute_jacobiright(right):
+    wideright=cupy.zeros((right.shape[0],right.shape[1]))
+    for i in range(right.shape[0]):
+        for j in range(right.shape[1]):
+            wideright[i,j]=right[i,j]
+    return wideright
 
 from datetime import datetime
 def get_datetime():

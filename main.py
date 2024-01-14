@@ -74,6 +74,7 @@ class SimulationWidget(QOpenGLWidget):
         self.update()
     
     def paintGL(self):
+        start=time.perf_counter()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
@@ -182,6 +183,7 @@ class SimulationWidget(QOpenGLWidget):
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         glFlush()
+        print('paintgl',time.perf_counter()-start)
 
     def update_simulation(self):
         delta_time = 0.001  # Time step
@@ -195,7 +197,10 @@ class SimulationWidget(QOpenGLWidget):
             self.opt.one_iterate() """
         if self.opt.stop:
             return
-        self.opt.one_iterate()
+        for i in range(opt.params.updategl_hz):
+            if self.opt.stop:
+                return
+            self.opt.one_iterate()
         self.update()
         
 

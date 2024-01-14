@@ -81,6 +81,9 @@ class deform():
         self.simu_vertices_grad=0
         self.set_all_forces()
 
+        self.balance_solver.compute_csr_right()
+        self.jacobiright=tool.compute_jacobiright(self.balance_solver.jacobiright)
+
         self.target_image = imageio.imread(params.image).astype('float32') / 255.
         self.target_image=torch.from_numpy(self.target_image.transpose(2,0,1)).cuda().unsqueeze(dim=0)
         
@@ -128,15 +131,12 @@ class deform():
         self.simu_vertices_grad=torch.zeros_like(self.tarp.vertices).clone().detach().cpu().numpy()[0]
 
     def one_iterate(self):
-
+        oss=time.perf_counter()
         if self.itertimes%100==0:
             self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_cof*1e-9,params.newton_rate)
         else:
             self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_cof,params.newton_rate)
 
-
-
-        
         #compute balance
         """ if self.newton_flag==True:
             self.balance_solver.newton()
@@ -171,23 +171,36 @@ class deform():
         
         start=time.perf_counter()
         self.balance_solver.compute_balance()
-        print('balance',time.perf_counter()-start)
+        print('compute balance',time.perf_counter()-start)
         if self.balance_solver.balance_result>params.balance_cof:
             return
         print('compute balance done')
         ptt=time.perf_counter()
-        start=time.perf_counter()
         if self.itertimes%params.update_w_hz==0:
             #self.optimizer = torch.optim.Adam(self.external_force.parameters(), lr=params.learning_rate)
             #self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=params.step_size,gamma=params.decay_gamma)
             self.external_force.update_weight()
-        print('vertice',time.perf_counter()-start)
         start=time.perf_counter()
-        self.balance_solver.compute_jacobi()
+
+
+
+
+        #self.balance_solver.compute_jacobi()
+
+        self.balance_solver.compute_csr()
+        self.balance_solver.compute_csr_right()
+        #self.balance_solver.jacobi=tool.compute_jacobi(self.balance_solver.jacobirow,self.balance_solver.jacobicol,self.balance_solver.jacobival,
+        #                   self.jacobiright)
+        middlejacobi=tool.compute_jacobi(self.balance_solver.jacobirow,self.balance_solver.jacobicol,self.balance_solver.jacobival,
+                            self.jacobiright)
+
+        print('compute F2X jacobi',time.perf_counter()-start)
+        start=time.perf_counter()
 
         #get shadow image from mesh
-        vertices=tool.py_simulation.apply(self.external_force.force_displace,self.balance_solver)
-        print('vertice',time.perf_counter()-start)
+        vertices=tool.py_simulation.apply(self.external_force.force_displace,self.balance_solver,middlejacobi)
+        print('vertices',time.perf_counter()-start)
+
         start=time.perf_counter()
         self.tarp.vertices=vertices
         mesh=self.tarp.get_render_mesh()
@@ -196,21 +209,22 @@ class deform():
         shadow_image=self.rasterizer(mesh)
         image=shadow_image.detach().cpu().numpy()[0].transpose((1,2,0))
 
-        print('image',time.perf_counter()-start)
+        print('image loss',time.perf_counter()-start)
         start=time.perf_counter()
 
 
         #compute loss using force and shadow image
         self.external_force.record_last_displace()
         barrier_loss=self.external_force()
-        print('barrier',time.perf_counter()-start)
+        print('barrier loss',time.perf_counter()-start)
         start=time.perf_counter()
         shadow_loss=shadow_image_loss(shadow_image,self.target_image)*params.image_weight
         loss=barrier_loss+shadow_loss
-        print('vertice',time.perf_counter()-start)
-        print('vesfs',time.perf_counter()-ptt)
+        print('shadow loss',time.perf_counter()-start)
+        print('total',time.perf_counter()-ptt)
         print('compute loss done')
         
+        start=time.perf_counter()
         #update loss figure
         figure_x.append(self.itertimes)
         fmax_loss_cpu=self.external_force.fmax_loss.clone().detach().cpu().numpy()
@@ -234,6 +248,8 @@ class deform():
         plt.plot(figure_x,figure_fmax_loss,label="force maximum barrier loss",color="magenta")
         plt.legend(loc="upper right")
 
+        print('draw figure',time.perf_counter()-start)
+        start=time.perf_counter()
         #save some results
         if self.itertimes==0:
             imageio.imsave(os.path.join(self.result_folder,'init.png'),(255*image).astype(np.uint8))
@@ -246,6 +262,8 @@ class deform():
         self.itertimes=self.itertimes+1
         #exit(0)
 
+        print('save results',time.perf_counter()-start)
+        start=time.perf_counter()
         #backward
         if params.use_vertgrad:
             vertices.retain_grad()
@@ -254,6 +272,8 @@ class deform():
         self.scheduler.step()
         print('backward done')
 
+        print('step time',time.perf_counter()-start)
+        start=time.perf_counter()
         #proximal processing
         if params.enable_prox:
             self.external_force.prox_processing()
@@ -271,6 +291,7 @@ class deform():
         self.simu_force=(self.external_force.force+torch.bmm(self.external_force.transform,self.external_force.force_displace))[0].clone().detach().cpu().numpy()
         self.balance_solver.set_forces(self.simu_force.flatten())
         
+        print('gui info',time.perf_counter()-start)
         #terminate condition
         delta=(self.external_force.force_displace-self.external_force.force_last_displace).clone().detach().cpu().numpy()
         if (delta**2).sum()<params.grad_error*0 or self.itertimes > params.max_iter-params.updategl_hz:
@@ -288,8 +309,9 @@ class deform():
         print('one iteration done')
         print('\n\n')
         print(self.itertimes)
-        print(time.perf_counter()-self.prev_time)
+        print('one iteration time',time.perf_counter()-self.prev_time)
         self.prev_time=time.perf_counter()
+        print('esfafesfsf',time.perf_counter()-oss)
 
     def write_params(self):
         tool.copy_file(os.path.join(params.current_dir,'params.yaml'),self.result_folder)
