@@ -26,6 +26,7 @@ use_vertgrad:  0
 use_forcegrad: 0
 use_adamgrad:  0
 updategl_hz:   50
+updateplt_hz:  10
 
 #simulation
 BALANCE_COF:   0.1

@@ -69,13 +69,13 @@ cc=cupy.linalg.solve(ca,cb)
 print(cc) """
 
 """ from scipy import linalg
-from scipy.sparse import coo_matrix, linalg as sla
+from scipy.sparse import coo_matrix, csr_matrix,linalg as sla
 row=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/row.txt',dtype=np.int64)
 col=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/col.txt',dtype=np.int64)
 value=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/value.txt',dtype=np.float64)
 right=np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/right.txt',dtype=np.float64)
-wideright=np.zeros((right.shape[0],100))
-#wideright[0:right.shape[0],:]=right[:] """
+wideright=np.zeros((right.shape[0],100)) """
+#wideright[0:right.shape[0],:]=right[:]
 
 from cupyx.scipy.sparse import coo_matrix,csr_matrix, linalg as sla
 row=cupy.asarray(np.loadtxt('/home/yanyisheshou/Program/TarpDesign/algorithm/data/denseInfo/row.txt',dtype=np.int64))
@@ -96,12 +96,12 @@ start_1=time.perf_counter()
 left=coo_matrix((value,(row,col)),shape=(right.shape[0],right.shape[0]))
 #left=csr_matrix(left)
 lefttemp=coo_matrix((value,(row,col)),shape=(right.shape[0],right.shape[0]))
-#lefttemp=csr_matrix(lefttemp)
+lefttemp=csr_matrix(lefttemp)
 print('-1',time.perf_counter()-start_1)
 
-""" start0=time.perf_counter()
-x=sla.spsolve(left,right)
-print('0',time.perf_counter()-start0) """
+start0=time.perf_counter()
+x=sla.lsqr(left,right)
+print('0',time.perf_counter()-start0)
 
 start1=time.perf_counter()
 lu=sla.splu(lefttemp)

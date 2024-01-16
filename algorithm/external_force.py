@@ -53,7 +53,7 @@ class ExternalForce(nn.Module):
             f=torch.from_numpy(np.loadtxt(params.force_file,
                                           dtype=np.float64)).reshape(batch_size,f.shape[1],3).cuda().double()
         self.register_buffer("force",nn.Parameter(f))
-        uniquesize=self.force.shape[1]-1
+        uniquesize=self.force.shape[1]-2
         f=torch.zeros((batch_size,uniquesize,3)).double()
         if params.use_denseInfo:
             f=torch.from_numpy(np.loadtxt(params.forcedis_file,
@@ -64,7 +64,7 @@ class ExternalForce(nn.Module):
         transform=torch.zeros((batch_size,self.force.shape[1],uniquesize)).double()
         for i in range(uniquesize):
             transform[:,i,i]=1.0
-            transform[:,i+1,i]=-1.0
+            transform[:,i+2,i]=-1.0
         #transform[:,uniquesize,:]=-1.0
         self.register_buffer("transform",nn.Parameter(transform))
 
@@ -99,10 +99,14 @@ class ExternalForce(nn.Module):
         val=tool.force_SOCP(vertices[0],boundary_index,tarp_info.CI,
                             (tarp_info.mass*tarp_info.g/boundary_index.shape[0]).cpu().numpy()).reshape(boundary_index.shape[0],2)
         batch_size=vertices.shape[0]
-        f=np.zeros((batch_size,boundary_index.shape[0],3))
+        f=np.zeros((batch_size,boundary_index.shape[0]*2,3))
         #print(val[:,0].sum(),val[:,1].sum())
-        f[0,:,0]=val[:,0]
-        f[0,:,1]=val[:,1]
+        #f[0,:,0]=val[:,0]
+        #f[0,:,1]=val[:,1]
+        f[0,::2,0]=val[:,0]*0.5
+        f[0,1::2,0]=val[:,0]*0.5
+        f[0,::2,1]=val[:,1]*0.5
+        f[0,1::2,1]=val[:,1]*0.5
 
         """ #cut the boundary to several segments and set upward and downward initial force separately
         segment_num=8 
@@ -122,8 +126,10 @@ class ExternalForce(nn.Module):
         #print(f[:,:,0].sum(),f[:,:,1].sum(),f[:,:,2].sum())
         return torch.from_numpy(f).cuda() """
 
-        average_weight=tarp_info.mass*tarp_info.g/boundary_index.shape[0]
-        f[:,:,2]=average_weight.cpu().numpy()
+        average_weight=(tarp_info.mass*tarp_info.g/boundary_index.shape[0]).cpu().numpy()
+        #f[:,:,2]=average_weight.cpu().numpy()
+        f[:,::2,2]=average_weight*4.0
+        f[:,1::2,2]=-average_weight*3.0
         return torch.from_numpy(f).cuda()
         
     def now_force(self):

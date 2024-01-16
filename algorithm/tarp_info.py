@@ -74,6 +74,7 @@ class tarp_params():
         self.use_forcegrad=meta_params['use_forcegrad']
         self.use_adamgrad=meta_params['use_adamgrad']
         self.updategl_hz=meta_params['updategl_hz']
+        self.updateplt_hz=meta_params['updateplt_hz']
         #simulation
         self.balance_cof=meta_params['BALANCE_COF']
         self.newton_rate=meta_params['NEWTON_RATE']

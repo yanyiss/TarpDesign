@@ -185,7 +185,8 @@ class deform():
 
 
 
-        #self.balance_solver.compute_jacobi()
+        """ self.balance_solver.compute_jacobi()
+        exit(0) """
 
         self.balance_solver.compute_csr()
         self.balance_solver.compute_csr_right()
@@ -240,13 +241,14 @@ class deform():
         figure_fnorm1_loss.append(fnorm1_loss_cpu)
         figure_shadow_loss.append(shadow_loss_cpu)
         figure_total_loss.append(total_loss_cpu)
-        plt.clf()
-        plt.plot(figure_x,figure_total_loss,label="total loss",color='red')
-        plt.plot(figure_x,figure_shadow_loss,label="shadow loss",color='lightgreen')
-        plt.plot(figure_x,figure_fnorm1_loss,label="force l1-norm loss",color='peru')
-        plt.plot(figure_x,figure_fdir_loss,label="force direction barrier loss",color="cyan")
-        plt.plot(figure_x,figure_fmax_loss,label="force maximum barrier loss",color="magenta")
-        plt.legend(loc="upper right")
+        if self.itertimes%params.updateplt_hz==0:
+           plt.clf()
+           plt.plot(figure_x,figure_total_loss,label="total loss",color='red')
+           plt.plot(figure_x,figure_shadow_loss,label="shadow loss",color='lightgreen')
+           plt.plot(figure_x,figure_fnorm1_loss,label="force l1-norm loss",color='peru')
+           plt.plot(figure_x,figure_fdir_loss,label="force direction barrier loss",color="cyan")
+           plt.plot(figure_x,figure_fmax_loss,label="force maximum barrier loss",color="magenta")
+           plt.legend(loc="upper right")
 
         print('draw figure',time.perf_counter()-start)
         start=time.perf_counter()

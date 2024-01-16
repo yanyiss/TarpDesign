@@ -126,7 +126,9 @@ class SimulationWidget(QOpenGLWidget):
         glColor3f(0.7,0.0,0.0)
         for i in index:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
-            glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
+            glVertex3f(vertices[i][0]+forces[id*2][0],vertices[i][1]+forces[id*2][1],vertices[i][2]+forces[id*2][2])
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices[i][0]+forces[id*2+1][0],vertices[i][1]+forces[id*2+1][1],vertices[i][2]+forces[id*2+1][2])
             id=id+1
         glEnd()
         
