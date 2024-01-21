@@ -1,7 +1,7 @@
 #source file
-template_mesh: obj/hex06.obj
+template_mesh: obj/unit2square.obj
 image:         image/square.png
-info_path:     info/hex_info06.txt
+info_path:     info/unit2square.txt
 output_dir:    results
 
 #dense file
@@ -19,25 +19,25 @@ IMAGE_SIZE:    128
 SIGMA_VAL:     0.0001
 GAMMA_VAL:     0.00000001
 VIEW_ANGLE:    4
-VIEW_SCALE:    0.25
+VIEW_SCALE:    1
 
 #gui
-use_vertgrad:  1
-use_forcegrad: 1
-use_voptgrad:  0
-use_foptgrad:  0
+use_vertgrad:  0
+use_forcegrad: 0
+use_adamgrad:  0
 updategl_hz:   50
+updateplt_hz:  10
 
 #simulation
-BALANCE_COF:   0.0001
-NEWTON_RATE:   0.000001
+BALANCE_COF:   0.01
+NEWTON_RATE:   0.00001
 
 #optimization setting
 STEP_SIZE:     100
 DECAY_GAMMA:   0.99
 LEARNING_RATE: 0.001
-MAX_ITER:      100000
-update_w_hz:   2500
+MAX_ITER:      50000
+update_w_hz:   8000
 grad_error:    0.0000000001
 nume_error:    0.000001
 enable_prox:   0
@@ -52,17 +52,14 @@ l1_beta:       0.5
 
 force_delay:   10.0
 cosine_delay:  0.05
-image_weight:  10.0
+image_weight:  1.0
 fmax_weight:   0.0005
 fdir_weight:   0.001
-fnorm1_weight: 0.001
-bal_weight:    1.0
-rf_weight:     10.0
-fixed_weight:  10.0
+fnorm1_weight: 0.0005
 
 #loss type: image or shadow
 loss_type:     image
-fmax_cons:     0
+fmax_cons:     1
 fdir_cons:     0
 fnorm1_cons:   1
 

@@ -14,40 +14,30 @@ import argparse
 #import example
 
 import soft_renderer as sr
-
-def ev(x):
-    y = x[0]**2+x[1]**3+x[2]**4+x[3]**5
-    return y
-
 def main():
     
  
-    """ x = torch.ones(4)
+    x = torch.ones(3, 4)
     x.requires_grad_()
 
-    y = x[0]**2+x[1]**3+x[2]**4+x[3]**5
-    grad = torch.autograd.grad(outputs=y, inputs=x, grad_outputs=torch.ones_like(y), create_graph=True)[0] """
-    #grad2=torch.zeros((2,2,1,2,2))
-    #grad2[:,:,:,0:2,0:2] = torch.autograd.grad(outputs=grad[:,:,:], inputs=x, grad_outputs=torch.ones_like(grad[:,:,:]))[0]
-    #grad2[:,:,:,0:2,0:2] = torch.autograd.grad(outputs=grad[:,:,:], inputs=x, grad_outputs=torch.ones_like(grad[:,:,:]))[0]
-    #grad2=torch.autograd.grad(outputs=grad,inputs=x,grad_outputs=torch.ones_like(grad))[0]
-
-    #grad2=torch.zeros((4,4))
-    """ for i in range(4):
-        grad2[i,0:4]=torch.autograd.grad(outputs=grad[i],inputs=x,grad_outputs=torch.ones_like(grad[i]),retain_graph=True)[0] """
-    
-    
-    #print(grad)
-    #print(grad2)
+    y = x ** 4 
+    grad = torch.autograd.grad(outputs=y, inputs=x, grad_outputs=torch.ones_like(y), create_graph=True)[0]
+    grad2 = torch.autograd.grad(outputs=grad, inputs=x, grad_outputs=torch.ones_like(grad))[0]
+    print(grad2)
+    """ print(torch.log(torch.tensor([1.1]))/121)
+    #print(example.add([[4,5,6,7,7],[5,6,7,2,1]]))
+    print(np.array([1,2,3]))
     x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
     print(x)
-    print(x[0].t().sum(dim=1))
-    print((x[0].t().sum(dim=1)**2).sum())
-    """ x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
-    print(x.shape)
-    y=x[:,0:3,:]
-    print(torch.cat((x,y),dim=1)) """
-    
+    print(torch.norm(x,p=2,dim=2))
+    ff=torch.norm(x,p=2,dim=2)
+    print(ff.unsqueeze(dim=2).repeat(1,1,3))
+
+    f=x[0].flatten()
+    print(f)
+    g=f.reshape(1,4,3)
+    print(g)
+    print(torch.zeros((4,2,3))) """
 
 
     """ print((x[0].t().sum(dim=1)**2).sum())

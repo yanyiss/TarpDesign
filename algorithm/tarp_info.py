@@ -3,7 +3,7 @@ import numpy as np
 import algorithm.tool as tool
 
 class tarp_info():
-    def __init__(self,vertex,data,params):
+    def __init__(self,vertex,data):
 
         batch_size=vertex.size(0)
         self.nv = vertex.size(1)
@@ -17,7 +17,7 @@ class tarp_info():
         #gravity acceleration        unit: m/(s^2)
         self.g=torch.tensor(data[3]).cuda()
         #gravity                     unit: N
-        G=np.zeros([batch_size,self.nv,3]).astype(np.float32)
+        G=np.zeros([batch_size,self.nv,3]).astype(np.float64)
         G[:,:,2]=-data[2]*data[3]/self.nv
         self.G=torch.from_numpy(G).cuda()
         #maximum force on the rope   unit: N
@@ -39,8 +39,10 @@ class tarp_info():
         #vertex that are forced
         self.C=torch.cat([self.C0,self.C1],dim=0)
         #self.C=0
-        boundary_index=tool.get_mesh_boundary(params.template_mesh)
-        self.C=boundary_index
+        #vertically upward direction
+        #n=np.zeros([batch_size,self.C.size(0),3]).astype(np.float64)
+        #n[:,:,2]=1.0
+        #self.n=torch.from_numpy(n).cuda()
 
 class tarp_params():
     def __init__(self):
@@ -70,9 +72,9 @@ class tarp_params():
         #gui
         self.use_vertgrad=meta_params['use_vertgrad']
         self.use_forcegrad=meta_params['use_forcegrad']
-        self.use_voptgrad=meta_params['use_voptgrad']
-        self.use_foptgrad=meta_params['use_foptgrad']
+        self.use_adamgrad=meta_params['use_adamgrad']
         self.updategl_hz=meta_params['updategl_hz']
+        self.updateplt_hz=meta_params['updateplt_hz']
         #simulation
         self.balance_cof=meta_params['BALANCE_COF']
         self.newton_rate=meta_params['NEWTON_RATE']
@@ -98,9 +100,6 @@ class tarp_params():
         self.fmax_weight=meta_params['fmax_weight']
         self.fdir_weight=meta_params['fdir_weight']
         self.fnorm1_weight=meta_params['fnorm1_weight']
-        self.bal_weight=meta_params['bal_weight']
-        self.rf_weight=meta_params['rf_weight']
-        self.fixed_weight=meta_params['fixed_weight']
         #loss type
         self.loss_type=meta_params['loss_type']
         self.fmax_cons=meta_params['fmax_cons']
@@ -122,7 +121,7 @@ class Tarp():
         self.faces=template_mesh.faces
 
         data=np.loadtxt(params.info_path,dtype=np.float64)
-        self.tarp_info=tarp_info(self.vertices,data,params)
+        self.tarp_info=tarp_info(self.vertices,data)
 
     def get_render_mesh(self):
         return sr.Mesh(self.vertices.repeat(self.batch_size,1,1),self.faces.repeat(self.batch_size,1,1))
