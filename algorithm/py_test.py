@@ -14,9 +14,18 @@ import argparse
 #import example
 
 import soft_renderer as sr
+import math
 def main():
-    
- 
+    a=torch.range(1,0)
+    print(a)
+    print(range(1,0))
+    print(range(1,2))
+    ascension_dif=torch.arange(0,4)
+    ascension_dif=ascension_dif.reshape(4,1).repeat(1,8)
+    print(ascension_dif)
+    x_shift=torch.cos(ascension_dif)
+    print(x_shift)
+
     x = torch.ones(3, 4)
     x.requires_grad_()
 

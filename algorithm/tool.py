@@ -1,6 +1,14 @@
 import cvxpy as cp
 import numpy as np
 
+def shadow_intersection(all_shadow_image):
+    num=all_shadow_image.shape[0]
+    shadow_image=all_shadow_image[0]
+    if num>1:
+        for i in range(1,num-1):
+            shadow_image=all_shadow_image[i]*shadow_image
+    return shadow_image
+
 def force_SOCP(vertices,index,center_id,reference_norm):
     dir=(vertices[index,0:2]-vertices[center_id,0:2]).cpu().numpy()
     dir_norm=np.linalg.norm(dir,axis=1,keepdims=True)

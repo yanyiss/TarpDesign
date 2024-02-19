@@ -21,6 +21,14 @@ GAMMA_VAL:     0.00000001
 VIEW_ANGLE:    4
 VIEW_SCALE:    0.25
 
+#solar condition, sample_type: time or arc
+loc_latitude:  23
+dir_latitude:  31
+start_moment:  12.0
+end_moment:    14.0
+sample_num:    20
+sample_type:   arc
+
 #gui
 use_vertgrad:  0
 use_forcegrad: 0
@@ -29,14 +37,14 @@ updategl_hz:   50
 updateplt_hz:  10
 
 #simulation
-BALANCE_COF:   0.1
-NEWTON_RATE:   100
+BALANCE_COF:   0.01
+NEWTON_RATE:   0.00001
 
 #optimization setting
 STEP_SIZE:     100
 DECAY_GAMMA:   0.99
 LEARNING_RATE: 0.001
-MAX_ITER:      100000
+MAX_ITER:      80000
 update_w_hz:   8000
 grad_error:    0.0000000001
 nume_error:    0.000001
@@ -57,8 +65,8 @@ fmax_weight:   0.0005
 fdir_weight:   0.001
 fnorm1_weight: 0.0005
 
-#loss type: image or shadow
-loss_type:     image
+#loss type: image or area
+loss_type:     area
 fmax_cons:     1
 fdir_cons:     0
 fnorm1_cons:   1

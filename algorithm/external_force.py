@@ -53,7 +53,7 @@ class ExternalForce(nn.Module):
             f=torch.from_numpy(np.loadtxt(params.force_file,
                                           dtype=np.float64)).reshape(batch_size,f.shape[1],3).cuda().double()
         self.register_buffer("force",nn.Parameter(f))
-        uniquesize=self.force.shape[1]-2
+        uniquesize=self.force.shape[1]-1
         f=torch.zeros((batch_size,uniquesize,3)).double()
         if params.use_denseInfo:
             f=torch.from_numpy(np.loadtxt(params.forcedis_file,
@@ -64,7 +64,7 @@ class ExternalForce(nn.Module):
         transform=torch.zeros((batch_size,self.force.shape[1],uniquesize)).double()
         for i in range(uniquesize):
             transform[:,i,i]=1.0
-            transform[:,i+2,i]=-1.0
+            transform[:,i+1,i]=-1.0
         #transform[:,uniquesize,:]=-1.0
         self.register_buffer("transform",nn.Parameter(transform))
 
@@ -87,7 +87,7 @@ class ExternalForce(nn.Module):
         self.l1_alpha=params.l1_alpha
         self.l1_beta=params.l1_beta
 
-        self.weight=0
+        self.weight=1
         self.boundary_dir=0
         self.update_boudary_dir(vertices)
         self.fmax_loss=0
@@ -99,14 +99,14 @@ class ExternalForce(nn.Module):
         val=tool.force_SOCP(vertices[0],boundary_index,tarp_info.CI,
                             (tarp_info.mass*tarp_info.g/boundary_index.shape[0]).cpu().numpy()).reshape(boundary_index.shape[0],2)
         batch_size=vertices.shape[0]
-        f=np.zeros((batch_size,boundary_index.shape[0]*2,3))
+        f=np.zeros((batch_size,boundary_index.shape[0],3))
         #print(val[:,0].sum(),val[:,1].sum())
-        #f[0,:,0]=val[:,0]
-        #f[0,:,1]=val[:,1]
-        f[0,::2,0]=val[:,0]*0.5
+        f[0,:,0]=val[:,0]
+        f[0,:,1]=val[:,1]
+        """ f[0,::2,0]=val[:,0]*0.5
         f[0,1::2,0]=val[:,0]*0.5
         f[0,::2,1]=val[:,1]*0.5
-        f[0,1::2,1]=val[:,1]*0.5
+        f[0,1::2,1]=val[:,1]*0.5 """
 
         """ #cut the boundary to several segments and set upward and downward initial force separately
         segment_num=8 
@@ -127,9 +127,9 @@ class ExternalForce(nn.Module):
         return torch.from_numpy(f).cuda() """
 
         average_weight=(tarp_info.mass*tarp_info.g/boundary_index.shape[0]).cpu().numpy()
-        #f[:,:,2]=average_weight.cpu().numpy()
-        f[:,::2,2]=average_weight*4.0
-        f[:,1::2,2]=-average_weight*3.0
+        f[:,:,2]=average_weight
+        """ f[:,::2,2]=average_weight*2
+        f[:,1::2,2]=-average_weight """
         return torch.from_numpy(f).cuda()
         
     def now_force(self):
@@ -154,8 +154,11 @@ class ExternalForce(nn.Module):
         return self.logelp(innerproduct+1.0,params.cosine_delay+1.0).sum()
     
     def update_weight(self):
+        prevFnorm1=self.FNorm1(self.now_force()).clone().detach()
         self.weight=torch.sqrt((self.now_force()**2).sum(dim=2)+self.l1_epsilon).clone().detach()
         self.weight=torch.pow(self.weight+self.l1_xi,self.l1_eta-1.0)
+        nowFnorm1=self.FNorm1(self.now_force()).clone().detach()
+        self.weight=self.weight*prevFnorm1/nowFnorm1
         self.l1_xi=self.l1_xi*self.l1_rho
 
     def FNorm1(self,forces):
@@ -210,8 +213,6 @@ class ExternalForce(nn.Module):
         self.fdir_loss=self.FdirConstraint(forces)*params.fdir_weight if params.fdir_cons else zero
         self.fnorm1_loss=self.FNorm1(forces)*params.fnorm1_weight if params.fnorm1_cons else zero
         return self.fmax_loss+self.fdir_loss+self.fnorm1_loss
-        return ((self.FmaxConstraint(forces)*params.fmax_weight) if params.fmax_cons else zero)\
-              +((self.FNorm1(forces)*params.fnorm1_weight) if params.fnorm1_cons else zero)
 
     #combine reweighted-l1 and proximal gradient --> n-1 forces rather than n
     def prox(self,g):

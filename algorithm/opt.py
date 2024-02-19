@@ -23,6 +23,7 @@ figure_total_loss=[]
 plt.ion()
 
 params=TI.tarp_params()
+eye_value=[0.0,0.0,-1.0]
 
 def shadow_image_loss(shadow_image,target_image):
     if params.loss_type=='image':
@@ -30,6 +31,8 @@ def shadow_image_loss(shadow_image,target_image):
     elif params.loss_type=='area':
         return -torch.sum(shadow_image)/(params.image_size*params.image_size)
     else:
+        print('shadow image loss error')
+        exit(0)
         return torch.tensor([0]).cuda()
 
 class deform():
@@ -42,14 +45,27 @@ class deform():
             params.template_mesh=params.result_mesh
 
 
-        self.transform=sr.LookAt(perspective=False,viewing_scale=params.view_scale,eye=[0,0,-1.0])
-        #self.transform=sr.LookAt(perspective=False,viewing_scale=params.view_scale,eye=[-3,3,-3.0])
-        #self.transform=sr.LookAt(viewing_angle=VIEW_ANGLE,eye=[0,0,-50])
+        self.transform=sr.LookAt(perspective=False,viewing_scale=params.view_scale,eye=eye_value)
         self.lighting=sr.Lighting(directions=[0,0,1.0])
         self.rasterizer=sr.SoftRasterizer(image_size=params.image_size,sigma_val=params.sigma_value,gamma_val=params.gamma_value,aggr_func_rgb='hard')
 
         boundary_index=tool.get_mesh_boundary(params.template_mesh)
         self.tarp = TI.Tarp(params)
+
+        """ mesh=self.tarp.get_render_mesh()
+        mesh=self.lighting(mesh)
+        mesh=self.transform(mesh)
+        shadow_image=self.rasterizer(mesh)
+        image=shadow_image.detach().cpu().numpy()[0].transpose((1,2,0))
+        para_dir=str(tool.get_datetime())+' '+str(self.tarp.tarp_info.C.shape[0])+' '+str(params.balance_cof)\
+                 +' '+str(params.learning_rate)+' '+os.path.splitext(os.path.split(params.image)[1])[0]
+        #para_dir='temp'
+        self.result_folder=os.path.join(params.output_dir,para_dir)
+        if os.path.exists(self.result_folder)==False:
+            os.mkdir(self.result_folder)
+            os.mkdir(os.path.join(self.result_folder,'shadow'))
+        imageio.imsave(os.path.join(self.result_folder,'init.png'),(255*image).astype(np.uint8))
+        exit(0) """
 
         self.tarp.tarp_info.C=boundary_index
         self.simu_pos=self.tarp.vertices[0].clone().detach().cpu().numpy()
@@ -64,6 +80,10 @@ class deform():
                         self.tarp.tarp_info.CI.clone().detach().cpu().numpy()
                         )
         self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_cof,params.newton_rate)
+        self.balance_solver.set_sampling_parameter(params.loc_rad,params.dir_rad,params.start_rad,params.end_rad,params.sample_num)
+        self.balance_solver.cubic_sampling()
+        self.sampling_lambda=torch.from_numpy(self.balance_solver.sampling_lambda).cuda()
+
         #self.newton_flag=False
         self.small_gradient=False
         self.stop=False
@@ -87,11 +107,13 @@ class deform():
         self.target_image = imageio.imread(params.image).astype('float32') / 255.
         self.target_image=torch.from_numpy(self.target_image.transpose(2,0,1)).cuda().unsqueeze(dim=0)
         
-        para_dir=str(tool.get_datetime())+' '+str(self.tarp.tarp_info.C.shape[0])+' '+str(params.balance_cof)\
-                 +' '+str(params.learning_rate)+' '+os.path.splitext(os.path.split(params.image)[1])[0]
+        para_dir=str(tool.get_datetime())#+' '+str(self.tarp.tarp_info.C.shape[0])+' '+str(params.balance_cof)\
+                 #+' '+str(params.learning_rate)+' '+os.path.splitext(os.path.split(params.image)[1])[0]
+        #para_dir='temp'
         self.result_folder=os.path.join(params.output_dir,para_dir)
         if os.path.exists(self.result_folder)==False:
             os.mkdir(self.result_folder)
+            os.mkdir(os.path.join(self.result_folder,'shadow'))
         self.write_params()
         tool.write_readme(' ',os.path.join(self.result_folder,'readme.txt'))
 
@@ -131,7 +153,7 @@ class deform():
         self.simu_vertices_grad=torch.zeros_like(self.tarp.vertices).clone().detach().cpu().numpy()[0]
 
     def one_iterate(self):
-        oss=time.perf_counter()
+        print('\n\nitertimes:',self.itertimes)
         if self.itertimes%100==0:
             self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_cof*1e-9,params.newton_rate)
         else:
@@ -204,11 +226,13 @@ class deform():
 
         start=time.perf_counter()
         self.tarp.vertices=vertices
-        mesh=self.tarp.get_render_mesh()
+        mesh=self.tarp.get_render_mesh(self.sampling_lambda)
         mesh=self.lighting(mesh)
         mesh=self.transform(mesh)
-        shadow_image=self.rasterizer(mesh)
-        image=shadow_image.detach().cpu().numpy()[0].transpose((1,2,0))
+        all_shadow_image=self.rasterizer(mesh)
+        shadow_image=tool.shadow_intersection(all_shadow_image)
+        #print(shadow_image)
+        image=shadow_image.detach().cpu().numpy().transpose((1,2,0))
 
         print('image loss',time.perf_counter()-start)
         start=time.perf_counter()
@@ -256,12 +280,11 @@ class deform():
         if self.itertimes==0:
             imageio.imsave(os.path.join(self.result_folder,'init.png'),(255*image).astype(np.uint8))
         if self.itertimes%params.saveshadow_hz==0:
-            imageio.imsave(os.path.join(self.result_folder,'deform_%05d.png'%self.itertimes),(255*image).astype(np.uint8))
+            imageio.imsave(os.path.join(self.result_folder,'shadow/deform_%05d.png'%self.itertimes),(255*image).astype(np.uint8))
         if self.itertimes%params.saveloss_hz==0:
             plt.savefig(os.path.join(self.result_folder, 'loss.png'))
         if self.itertimes%params.saveresult_hz==0:
             self.write_results()
-        self.itertimes=self.itertimes+1
         #exit(0)
 
         print('save results',time.perf_counter()-start)
@@ -309,23 +332,22 @@ class deform():
             #tool.write_data(np.array([hour_time,]))
 
         print('one iteration done')
-        print('\n\n')
-        print(self.itertimes)
         print('one iteration time',time.perf_counter()-self.prev_time)
         self.prev_time=time.perf_counter()
-        print('esfafesfsf',time.perf_counter()-oss)
+        self.itertimes=self.itertimes+1
 
     def write_params(self):
         tool.copy_file(os.path.join(params.current_dir,'params.yaml'),self.result_folder)
 
     def write_results(self):
-        self.tarp.get_render_mesh().save_obj(os.path.join(self.result_folder,'result.obj'))
+        self.tarp.get_mesh().save_obj(os.path.join(self.result_folder,'result.obj'))
         primal_force=self.external_force.force[0].clone().detach().cpu().numpy()
         tool.write_data(primal_force,os.path.join(self.result_folder,'force.txt'))
         #here I use force_last_displace rather than force_displace because force_displace has been updated
         delta_force=torch.bmm(self.external_force.transform,self.external_force.force_last_displace)[0].clone().detach().cpu().numpy()
         tool.write_data(delta_force,os.path.join(self.result_folder,'force_displace.txt'))
         tool.write_data(primal_force+delta_force,os.path.join(self.result_folder,'last_force.txt'))
+        tool.write_data(self.simu_index,os.path.join(self.result_folder,'index.txt'),x3=False)
         
         run_time=np.floor(time.time()-self.begin_time)
         hour_time=run_time//3600

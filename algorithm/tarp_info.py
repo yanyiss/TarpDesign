@@ -69,6 +69,13 @@ class tarp_params():
         self.gamma_value=meta_params['GAMMA_VAL']
         self.view_angle=meta_params['VIEW_ANGLE']
         self.view_scale=meta_params['VIEW_SCALE']
+        #solar codition
+        self.loc_rad=meta_params['loc_latitude']/180.0*math.pi
+        self.dir_rad=meta_params['dir_latitude']/180.0*math.pi
+        self.start_rad=(meta_params['start_moment']-12.0)/12.0*math.pi
+        self.end_rad=(meta_params['end_moment']-12.0)/12.0*math.pi
+        self.sample_num=meta_params['sample_num']
+        self.sample_type=meta_params['sample_type']
         #gui
         self.use_vertgrad=meta_params['use_vertgrad']
         self.use_forcegrad=meta_params['use_forcegrad']
@@ -113,19 +120,58 @@ class tarp_params():
             self.fnorm1_cons=0
 
 import soft_renderer as sr
+import math
 class Tarp():
     def __init__(self,params):
         template_mesh=sr.Mesh.from_obj(params.template_mesh)
         self.batch_size=params.batch_size
         self.vertices=template_mesh.vertices
         self.faces=template_mesh.faces
+        self.loc_rad=torch.tensor([params.loc_rad]).cuda()
+        self.dir_rad=torch.tensor([params.dir_rad]).cuda()
+        self.start_rad=torch.tensor([params.start_rad]).cuda()
+        self.end_rad=torch.tensor([params.end_rad]).cuda()
+        self.sample_num=params.sample_num
+        self.sample_type=params.sample_type
 
         data=np.loadtxt(params.info_path,dtype=np.float64)
         self.tarp_info=tarp_info(self.vertices,data)
 
-    def get_render_mesh(self):
+    def get_render_mesh(self,sampling_lambda):
+        """ render_mesh=sr.Mesh(self.vertices.repeat(self.sample_num,1,1),self.faces.repeat(self.sample_num,1,1))
+        ascension_dif=self.start_rad+torch.range(0,self.sample_num-1).cuda()*(self.end_rad-self.start_rad)/(self.sample_num-1)
+        ascension_dif=ascension_dif.reshape(self.sample_num,1).repeat(1,render_mesh.num_vertices)
+        x_shift=(torch.sin(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)-torch.cos(self.loc_rad)*torch.sin(self.dir_rad))\
+                /(torch.cos(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)+torch.sin(self.loc_rad)*torch.sin(self.dir_rad))
+        y_shift=torch.cos(self.dir_rad)*torch.sin(ascension_dif)\
+                /(torch.cos(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)+torch.sin(self.loc_rad)*torch.sin(self.dir_rad))
+        render_mesh._vertices[:,:,0]=render_mesh._vertices[:,:,0]-render_mesh._vertices[:,:,2]*x_shift
+        render_mesh._vertices[:,:,1]=render_mesh._vertices[:,:,1]-render_mesh._vertices[:,:,2]*y_shift
+        return render_mesh
+        return sr.Mesh(self.vertices.repeat(self.batch_size,1,1),self.faces.repeat(self.batch_size,1,1)) """
+    
+        render_vertices=self.vertices.repeat(self.sample_num,1,1)
+        if self.sample_num>1:
+            if self.sample_type=='time':
+                ascension_dif=self.start_rad+torch.range(0,self.sample_num-1).cuda()*(self.end_rad-self.start_rad)/(self.sample_num-1)
+            elif self.sample_type=='arc':
+                ascension_dif=self.start_rad+sampling_lambda*(self.end_rad-self.start_rad)/(self.sample_num-1)
+            else:
+                print('get render mesh error')
+                exit(0)
+        else:
+            ascension_dif=self.start_rad.unsqueeze(dim=0)
+        ascension_dif=ascension_dif.reshape(self.sample_num,1).repeat(1,self.vertices.shape[0])
+        x_shift=(torch.sin(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)-torch.cos(self.loc_rad)*torch.sin(self.dir_rad))\
+                /(torch.cos(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)+torch.sin(self.loc_rad)*torch.sin(self.dir_rad))
+        y_shift=torch.cos(self.dir_rad)*torch.sin(ascension_dif)\
+                /(torch.cos(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)+torch.sin(self.loc_rad)*torch.sin(self.dir_rad))
+        render_vertices[:,:,0]=render_vertices[:,:,0]-render_vertices[:,:,2]*x_shift
+        render_vertices[:,:,1]=render_vertices[:,:,1]-render_vertices[:,:,2]*y_shift
+        return sr.Mesh(render_vertices,self.faces.repeat(self.sample_num,1,1))
+    
+    def get_mesh(self):
         return sr.Mesh(self.vertices.repeat(self.batch_size,1,1),self.faces.repeat(self.batch_size,1,1))
-
 
 
     
