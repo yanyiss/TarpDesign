@@ -2,6 +2,8 @@ import cvxpy as cp
 import numpy as np
 
 def shadow_intersection(all_shadow_image):
+    return torch.min(all_shadow_image,dim=0)[0]
+
     num=all_shadow_image.shape[0]
     shadow_image=all_shadow_image[0]
     if num>1:
@@ -46,21 +48,51 @@ def force_SOCP(vertices,index,center_id,reference_norm):
     return x.value
 
 import torch
+import torch.nn.functional as F
+import math
 import openmesh
+def calc_z_axis(mesh,hl):
+    hl=mesh.opposite_halfedge_handle(hl)
+    v0=mesh.point(mesh.from_vertex_handle(hl))
+    v1=mesh.point(mesh.to_vertex_handle(hl))
+    v2=mesh.point(mesh.to_vertex_handle(mesh.next_halfedge_handle(hl)))
+    v01=F.normalize(torch.tensor([v1[0]-v0[0],v1[1]-v0[1],v1[2]-v0[2]]).cuda(),p=2,dim=0)
+    v02=F.normalize(torch.tensor([v2[0]-v0[0],v2[1]-v0[1],v2[2]-v0[2]]).cuda(),p=2,dim=0)
+    return F.normalize(v01.cross(v02),p=2,dim=0)
+
+def calc_angle_weight(v0,v1,v2,z):
+    v10=F.normalize(torch.tensor([v0[0]-v1[0],v0[1]-v1[1],v0[2]-v1[2]]).cuda(),p=2,dim=0)
+    v12=F.normalize(torch.tensor([v2[0]-v1[0],v2[1]-v1[1],v2[2]-v1[2]]).cuda(),p=2,dim=0)
+    angle=torch.atan2(v10.cross(v12).dot(z),v10.dot(v12))
+    if angle<0:
+        angle=angle+math.pi*2
+    return angle.cpu()/math.pi
+    
 def get_mesh_boundary(mesh_dir):
     mesh=openmesh.read_trimesh(mesh_dir)
     hl=0
     v_index=np.array([])
+    v_weight=np.array([])
     for hl_iter in mesh.halfedges():
         if mesh.is_boundary(hl_iter):
             hl=hl_iter
             break
+    z=calc_z_axis(mesh,hl)
     hl_iter=mesh.next_halfedge_handle(hl)
     v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
+    v0=mesh.point(mesh.from_vertex_handle(hl_iter))
+    v1=mesh.point(mesh.to_vertex_handle(hl_iter))
+    v2=mesh.point(mesh.to_vertex_handle(mesh.next_halfedge_handle(hl_iter)))
+    v_weight=np.append(v_weight,calc_angle_weight(v0,v1,v2,z))
+
     while(hl_iter!=hl):
+        v0=mesh.point(mesh.to_vertex_handle(hl_iter))
         hl_iter=mesh.next_halfedge_handle(hl_iter)
+        v1=mesh.point(mesh.to_vertex_handle(hl_iter))
+        v2=mesh.point(mesh.to_vertex_handle(mesh.next_halfedge_handle(hl_iter)))
         v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
-    return torch.from_numpy(v_index.astype(int)).cuda()
+        v_weight=np.append(v_weight,calc_angle_weight(v0,v1,v2,z))
+    return torch.from_numpy(v_index.astype(int)).cuda(),torch.from_numpy(v_weight).cuda()
 
 
     index=np.array([])
@@ -91,10 +123,9 @@ def read_params():
     
     meta_params['current_dir']=current_dir
     meta_params['data_dir']=data_dir
-
-    meta_params['template_mesh']=os.path.join(data_dir,meta_params['template_mesh'])
+    meta_params['example_dir']=os.path.join(data_dir,'example')
+    
     meta_params['image']=os.path.join(data_dir,meta_params['image'])
-    meta_params['info_path']=os.path.join(data_dir,meta_params['info_path'])
     meta_params['output_dir']=os.path.join(data_dir,meta_params['output_dir'])
 
     meta_params['force_file']=os.path.join(data_dir,meta_params['force_file'])

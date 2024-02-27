@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import algorithm.tool as tool
+import os
 
 class tarp_info():
     def __init__(self,vertex,data):
@@ -50,10 +51,12 @@ class tarp_params():
         #dir
         self.current_dir=meta_params['current_dir']
         self.data_dir=meta_params['data_dir']
+        self.example_dir=meta_params['example_dir']
         #source file
-        self.template_mesh=meta_params['template_mesh']
+        self.example_name=meta_params['example_name']
+        self.template_mesh=os.path.join(self.example_dir,self.example_name,self.example_name+'.obj')
+        self.info_path=os.path.join(self.example_dir,self.example_name,'setting.txt')
         self.image=meta_params['image']
-        self.info_path=meta_params['info_path']
         self.output_dir=meta_params['output_dir']
         #dense file
         self.force_file=meta_params['force_file']
@@ -72,8 +75,8 @@ class tarp_params():
         #solar codition
         self.loc_rad=meta_params['loc_latitude']/180.0*math.pi
         self.dir_rad=meta_params['dir_latitude']/180.0*math.pi
-        self.start_rad=(meta_params['start_moment']-12.0)/12.0*math.pi
-        self.end_rad=(meta_params['end_moment']-12.0)/12.0*math.pi
+        self.start_rad=(12.0-meta_params['start_moment'])/12.0*math.pi
+        self.end_rad=(12.0-meta_params['end_moment'])/12.0*math.pi
         self.sample_num=meta_params['sample_num']
         self.sample_type=meta_params['sample_type']
         #gui
@@ -90,6 +93,7 @@ class tarp_params():
         self.decay_gamma=meta_params['DECAY_GAMMA']
         self.learning_rate=meta_params['LEARNING_RATE']
         self.max_iter=meta_params['MAX_ITER']
+        self.update_start=meta_params['update_start']
         self.update_w_hz=meta_params['update_w_hz']
         self.enable_prox=meta_params['enable_prox']
         self.grad_error=meta_params['grad_error']
@@ -155,12 +159,13 @@ class Tarp():
             if self.sample_type=='time':
                 ascension_dif=self.start_rad+torch.range(0,self.sample_num-1).cuda()*(self.end_rad-self.start_rad)/(self.sample_num-1)
             elif self.sample_type=='arc':
-                ascension_dif=self.start_rad+sampling_lambda*(self.end_rad-self.start_rad)/(self.sample_num-1)
+                ascension_dif=sampling_lambda
             else:
                 print('get render mesh error')
                 exit(0)
         else:
             ascension_dif=self.start_rad.unsqueeze(dim=0)
+        #print('\n\n\nascension',ascension_dif)
         ascension_dif=ascension_dif.reshape(self.sample_num,1).repeat(1,self.vertices.shape[0])
         x_shift=(torch.sin(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)-torch.cos(self.loc_rad)*torch.sin(self.dir_rad))\
                 /(torch.cos(self.loc_rad)*torch.cos(self.dir_rad)*torch.cos(ascension_dif)+torch.sin(self.loc_rad)*torch.sin(self.dir_rad))

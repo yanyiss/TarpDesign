@@ -9,9 +9,10 @@ import os
 params=TI.tarp_params()
 
 class ExternalForce(nn.Module):
-    def __init__(self,vertices,tarp_info,boundary_index):
+    def __init__(self,vertices,tarp_info,boundary_index,boundary_weight):
         super(ExternalForce,self).__init__()
         batch_size=vertices.shape[0]
+        self.boundary_weight=boundary_weight
         f=torch.zeros(batch_size,tarp_info.C.size(0)-1,3).cuda().double()
         """ f=torch.tensor([[[   9.5,  13.09,   -10.0],[   -9.5,    13.09,  -10.0 ],
                              [  15.4,    -5.0,  -10.0],[   -15.4,     -5.0,   -10.0],
@@ -167,7 +168,7 @@ class ExternalForce(nn.Module):
         self.l1_xi=self.l1_xi*self.l1_rho
         return (force_magnitude*weight).sum() """
         force_magnitude=torch.sqrt((forces**2).sum(dim=2)+self.l1_epsilon)
-        return (force_magnitude*self.weight).sum()
+        return (force_magnitude*self.weight*self.boundary_weight).sum()
     
     def linesearch(self,vertices):
         if params.fmax_cons+params.fdir_cons==0:

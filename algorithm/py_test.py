@@ -16,6 +16,16 @@ import argparse
 import soft_renderer as sr
 import math
 def main():
+    
+    x=np.array([[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]])
+    print(x)
+    dis=np.sum(x*x,axis=1)
+    print(dis)
+    print(dis.argmax())
+    exit(0)
+
+
+
     a=torch.range(1,0)
     print(a)
     print(range(1,0))

@@ -40,6 +40,15 @@ class deform():
         self.begin_time=time.time()
         
         os.makedirs(params.output_dir, exist_ok=True)
+        para_dir=str(tool.get_datetime())#+' '+str(self.tarp.tarp_info.C.shape[0])+' '+str(params.balance_cof)\
+                 #+' '+str(params.learning_rate)+' '+os.path.splitext(os.path.split(params.image)[1])[0]
+        #para_dir='temp'
+        self.result_folder=os.path.join(params.output_dir,para_dir)
+        if os.path.exists(self.result_folder)==False:
+            os.mkdir(self.result_folder)
+            os.mkdir(os.path.join(self.result_folder,'shadow'))
+        self.write_params()
+        tool.write_readme(' ',os.path.join(self.result_folder,'readme.txt'))
 
         if params.use_denseInfo:
             params.template_mesh=params.result_mesh
@@ -49,7 +58,7 @@ class deform():
         self.lighting=sr.Lighting(directions=[0,0,1.0])
         self.rasterizer=sr.SoftRasterizer(image_size=params.image_size,sigma_val=params.sigma_value,gamma_val=params.gamma_value,aggr_func_rgb='hard')
 
-        boundary_index=tool.get_mesh_boundary(params.template_mesh)
+        boundary_index,boundary_weight=tool.get_mesh_boundary(params.template_mesh)
         self.tarp = TI.Tarp(params)
 
         """ mesh=self.tarp.get_render_mesh()
@@ -88,7 +97,7 @@ class deform():
         self.small_gradient=False
         self.stop=False
 
-        self.external_force=external_force.ExternalForce(self.tarp.vertices,self.tarp.tarp_info,boundary_index).cuda()
+        self.external_force=external_force.ExternalForce(self.tarp.vertices,self.tarp.tarp_info,boundary_index,boundary_weight).cuda()
         self.optimizer = torch.optim.Adam(self.external_force.parameters(), lr=params.learning_rate)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=params.step_size,gamma=params.decay_gamma)
 
@@ -107,20 +116,9 @@ class deform():
         self.target_image = imageio.imread(params.image).astype('float32') / 255.
         self.target_image=torch.from_numpy(self.target_image.transpose(2,0,1)).cuda().unsqueeze(dim=0)
         
-        para_dir=str(tool.get_datetime())#+' '+str(self.tarp.tarp_info.C.shape[0])+' '+str(params.balance_cof)\
-                 #+' '+str(params.learning_rate)+' '+os.path.splitext(os.path.split(params.image)[1])[0]
-        #para_dir='temp'
-        self.result_folder=os.path.join(params.output_dir,para_dir)
-        if os.path.exists(self.result_folder)==False:
-            os.mkdir(self.result_folder)
-            os.mkdir(os.path.join(self.result_folder,'shadow'))
-        self.write_params()
-        tool.write_readme(' ',os.path.join(self.result_folder,'readme.txt'))
-
         self.pd_time=0
         self.newton_time=0
         self.prev_time=time.perf_counter()
-
 
         #self.tarp.vertices[:,:,0]=self.tarp.vertices[:,:,0]-self.tarp.vertices[:,326,0]
         #self.tarp.vertices[:,:,1]=self.tarp.vertices[:,:,1]-self.tarp.vertices[:,326,1]
@@ -128,8 +126,6 @@ class deform():
         self.tarp.faces[:,:,0]=self.tarp.faces[:,:,1]
         self.tarp.faces[:,:,1]=tr
         self.tarp.get_render_mesh().save_obj(os.path.join(self.result_folder,'result.obj')) """
-
-
 
         #self.target_image = imageio.imread(self.args.image).astype('float32') / 255.
         """ save_image=np.zeros([1,128,128,4])
@@ -198,7 +194,7 @@ class deform():
             return
         print('compute balance done')
         ptt=time.perf_counter()
-        if self.itertimes%params.update_w_hz==0:
+        if self.itertimes%params.update_w_hz==0 and self.itertimes > params.update_start-2:
             #self.optimizer = torch.optim.Adam(self.external_force.parameters(), lr=params.learning_rate)
             #self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=params.step_size,gamma=params.decay_gamma)
             self.external_force.update_weight()
