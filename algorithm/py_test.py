@@ -14,9 +14,53 @@ import argparse
 #import example
 
 import soft_renderer as sr
+from datetime import datetime
+import math
 def main():
+    x=np.zeros((2,1))
+    print(x[0],x[1])
+    np.append(x,values=np.array([[1],[3]]),axis=1)
+    print(x)
+
+    print(torch.cuda.device_count())
+    x=torch.tensor([True,False,False,True,False])
+    y=x.unsqueeze(dim=0).reshape(5,1).repeat(1,1,3)
+    print(y)
+    print(y.shape)
     
- 
+    x=torch.tensor([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])
+    print(x[0,0,0:2])
+    print(torch.norm(x,p=2,dim=2))
+    print(F.normalize(x,p=2,dim=2))
+    exit(0)
+
+    print(datetime.now())
+    str='fe4r'
+    str=datetime.now()
+    print(str.replace('4','-'))
+    print(datetime.now().replace(' ','-'))
+    exit(0)
+    return datetime.now().replace(' ','-')
+    
+    x=np.array([[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]])
+    print(x)
+    dis=np.sum(x*x,axis=1)
+    print(dis)
+    print(dis.argmax())
+    exit(0)
+
+
+
+    a=torch.range(1,0)
+    print(a)
+    print(range(1,0))
+    print(range(1,2))
+    ascension_dif=torch.arange(0,4)
+    ascension_dif=ascension_dif.reshape(4,1).repeat(1,8)
+    print(ascension_dif)
+    x_shift=torch.cos(ascension_dif)
+    print(x_shift)
+
     x = torch.ones(3, 4)
     x.requires_grad_()
 
