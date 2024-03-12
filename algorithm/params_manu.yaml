@@ -1,6 +1,6 @@
 #optimization method: initial, manu
-opt_method:       initial
-initial_dir:      2024-03-09-17-48-49-898115
+opt_method:       manu
+initial_dir:      2024-03-10-18-49-26-680741
 
 #source file
 example_name:     hex06
@@ -50,9 +50,9 @@ vertical_load:    1.0
 
 #optimization setting
 STEP_SIZE:        100
-DECAY_GAMMA:      0.99
+DECAY_GAMMA:      0.995
 LEARNING_RATE:    0.001
-MAX_ITER:         80000
+MAX_ITER:         160000
 update_start:     15000
 update_w_hz:      8000
 grad_error:       0.0000000001
@@ -82,7 +82,7 @@ fixed_cons:       0
 rope_cons:        1
 fmax_cons:        1
 fdir_cons:        0
-fnorm1_cons:      2
+fnorm1_cons:      0
 
 #other
 batch_size:       1

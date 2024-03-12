@@ -40,31 +40,31 @@ class deform():
         self.write_params()
         tool.write_readme(' ',os.path.join(self.result_folder,'readme.txt'))
         
-        #calc boundary information
-        boundary_index,boundary_weight=tool.get_mesh_boundary(params.template_mesh)
         self.tarp = TI.Tarp(params)
-        stick_index=self.tarp.tarp_info.C
-        for i,value in enumerate(self.tarp.tarp_info.C):
-            stick_index[i]=torch.nonzero(torch.eq(boundary_index,value))
 
         #init force class
-        self.force=force.Force(self.tarp.vertices,self.tarp.tarp_info,boundary_index,boundary_weight,stick_index).cuda()
+        self.force=force.Force(self.tarp.vertices,self.tarp.tarp_info).cuda()
+        if params.opt_method=='manu':
+            self.force.update_weight()
+            self.force.get_sparse_force_index()
 
         #init balance_solver
         self.balance_solver=balance_solver()
         self.balance_solver.set_info(
                         self.tarp.faces[0].clone().detach().cpu().numpy(),
                         self.tarp.vertices[0].clone().detach().cpu().numpy().flatten(),
-                        boundary_index.clone().detach().cpu().numpy(),
+                        self.tarp.tarp_info.boundary_index.clone().detach().cpu().numpy(),
                         self.tarp.tarp_info.k.clone().detach().cpu().numpy(),
                         0.1,
                         self.tarp.tarp_info.mass.clone().detach().cpu().numpy(),
                         self.tarp.tarp_info.CI.clone().detach().cpu().numpy()
                         )
+        
         self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_cof,params.newton_rate)
-        self.balance_solver.set_forces(self.force.now_force().clone().detach().cpu().numpy().flatten())
+        self.force.compute_now_forces()
+        self.balance_solver.set_forces(self.force.now_forces.clone().detach().cpu().numpy().flatten())
         self.balance_solver.compute_csr_right()
-        self.jacobi_solver=tool.jacobi_solver()
+        self.jacobi_solver=tool.linear_solver()
         self.jacobi_solver.compute_right(self.balance_solver.jacobiright)
         self.middleright=0
         #self.jacobiright=tool.compute_jacobiright(self.balance_solver.jacobiright)
@@ -75,7 +75,7 @@ class deform():
         self.tarp.set_sampling(torch.from_numpy(self.balance_solver.sampling_lambda).cuda())
 
         #init other class
-        self.geometry=geometry.Geometry(self.tarp)
+        self.geometry=geometry.Geometry(self.tarp,self.force)
         self.shadow=shadow.Shadow(self.tarp)
         self.optimizer = torch.optim.Adam(self.force.parameters(), lr=params.learning_rate)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=params.step_size,gamma=params.decay_gamma)
@@ -86,7 +86,7 @@ class deform():
         self.openFnorm1Cons=params.fnorm1_cons==2
         self.stop=False
         self.itertimes=0
-        self.simu_index=boundary_index.clone().detach().cpu().numpy()
+        self.simu_index=self.tarp.tarp_info.boundary_index.clone().detach().cpu().numpy()
         self.damping_rate=np.power(params.balance_min/params.balance_cof,params.accurate_hz/params.max_iter)
         self.now_balance=params.balance_cof
         self.prev_time=time.perf_counter()
@@ -105,7 +105,6 @@ class deform():
         if self.balance_solver.balance_result>self.now_balance:
             return
         
-        from_forward=time.perf_counter()
         #forward
         if self.itertimes%params.update_w_hz==0 and self.itertimes > params.update_start-2:
             if params.fnorm1_cons==2:
@@ -116,73 +115,51 @@ class deform():
                     self.openFnorm1Cons=True
                 self.force.update_weight()
 
-        start=time.perf_counter()
         if self.balance_solver.x_invariant==False:
             self.balance_solver.compute_csr()
             self.jacobi_solver.lu(self.balance_solver.jacobirow,self.balance_solver.jacobicol,self.balance_solver.jacobival)
-            self.middlejacobi=self.jacobi_solver.solve()
-        print('solve jacobi',time.perf_counter()-start)
-        start=time.perf_counter()
+            self.middlejacobi=self.jacobi_solver.solve().unsqueeze(dim=0)
             
 
-        #start=time.perf_counter()
-        #self.balance_solver.compute_csr()
-        #print('compute_csr',time.perf_counter()-start)
-        #start=time.perf_counter()
-        #self.balance_solver.compute_csr_right()
-        #print('compute_csr_right',time.perf_counter()-start)
-        #start=time.perf_counter()
-        #middlejacobi=tool.compute_jacobi(self.balance_solver.jacobirow,self.balance_solver.jacobicol,self.balance_solver.jacobival,
-        #                    self.jacobiright)
-        #print('compute_middlejacobi',time.perf_counter()-start)
-        #start=time.perf_counter()
         vertices=tool.py_simulation.apply(self.force.force_displace,self.balance_solver,self.middlejacobi)
-        print('compute_vertices',time.perf_counter()-start)
-        start=time.perf_counter()
 
         self.tarp.vertices=vertices
+        #test initial data validity
+        if self.itertimes==0:
+            if self.geometry.test_validity()==False:
+                print('invalid initial data')
+                exit(0)
+
         shadow_loss=self.shadow.loss_evaluation()
-        print('compute_shadow',time.perf_counter()-start)
-        start=time.perf_counter()
         geometry_loss=self.geometry.loss_evaluation()
-        print('compute_geometry',time.perf_counter()-start)
-        start=time.perf_counter()
         self.force.record_last_displace()
         barrier_loss=self.force()
-        print('compute_barrier',time.perf_counter()-start)
-        start=time.perf_counter()
         loss=barrier_loss+geometry_loss+shadow_loss
-        print('compute_loss',time.perf_counter()-start)
-        start=time.perf_counter()
+        #loss=barrier_loss
         
         #update loss figure
         self.loss_drawer.update(self.itertimes,self.force,self.geometry,self.shadow)
-        print('draw',time.perf_counter()-start)
-        start=time.perf_counter()
 
         #save some results
         self.shadow.save_image(self.result_folder,self.itertimes)
         self.loss_drawer.save_loss(self.result_folder,self.itertimes)
         if self.itertimes%params.saveresult_hz==0:
             self.write_results()
-        print('save results',time.perf_counter()-start)
-        start=time.perf_counter()
         
         #backward
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
-        print('compute_grad',time.perf_counter()-start)
-        start=time.perf_counter()
-
+        # print(self.force.force_displace)
+        # exit(0)
         #proximal processing
         if params.enable_prox:
             self.external_force.prox_processing()
 
-        self.force.linesearch(self.tarp.vertices)
-        print('compute_linesearch',time.perf_counter()-start)
-        start=time.perf_counter()
-        self.balance_solver.set_forces(self.force.now_force().clone().detach().cpu().numpy().flatten())
+        if params.rope_cons or params.fmax_cons or params.fdir_cons:
+            self.geometry.linesearch()
+        self.force.compute_now_forces()
+        self.balance_solver.set_forces(self.force.now_forces.clone().detach().cpu().numpy().flatten())
         
         #terminate condition
         delta=(self.force.force_displace-self.force.force_last_displace).clone().detach().cpu().numpy()
@@ -198,9 +175,7 @@ class deform():
             self.stop=True
             #tool.write_data(np.array([hour_time,]))
 
-        print('end',time.perf_counter()-start)
         print('one iteration done')
-        print('fff',time.perf_counter()-from_forward)
         print('one iteration time',time.perf_counter()-self.prev_time)
         self.prev_time=time.perf_counter()
         self.itertimes=self.itertimes+1
@@ -210,12 +185,28 @@ class deform():
 
     def write_results(self):
         self.tarp.get_mesh().save_obj(os.path.join(self.result_folder,'result.obj'))
-        primal_force=self.force.force[0].clone().detach().cpu().numpy()
-        tool.write_data(primal_force,os.path.join(self.result_folder,'force.txt'))
-        #here I use force_last_displace rather than force_displace because force_displace has been updated
-        delta_force=torch.bmm(self.force.transform,self.force.force_last_displace)[0].clone().detach().cpu().numpy()
-        tool.write_data(delta_force,os.path.join(self.result_folder,'force_displace.txt'))
-        tool.write_data(primal_force+delta_force,os.path.join(self.result_folder,'last_force.txt'))
+        # primal_force=self.force.force[0].clone().detach().cpu().numpy()
+        # tool.write_data(primal_force,os.path.join(self.result_folder,'force.txt'))
+        # #here I use force_last_displace rather than force_displace because force_displace has been updated
+        # tool.write_data(self.force.force_last_displace[0].clone().detach().cpu().numpy(),os.path.join(self.result_folder,'force_displace.txt'))
+        # delta_force=torch.bmm(self.force.transform,self.force.force_last_displace)[0].clone().detach().cpu().numpy()
+        # tool.write_data(delta_force,os.path.join(self.result_folder,'transform_force_displace.txt'))
+        # tool.write_data(primal_force+delta_force,os.path.join(self.result_folder,'last_force.txt'))
+
+        tool.write_data(self.force.force_last_displace[0].clone().detach().cpu().numpy(),os.path.join(self.result_folder,'force_displace.txt'))
+        primal_force=torch.bmm(self.force.transform,self.force.force_dif)
+        size=primal_force.shape[1]-1
+        primal_force[:,size,2]=primal_force[:,size,2]+self.tarp.tarp_info.mass*self.tarp.tarp_info.g
+        tool.write_data(primal_force[0].clone().detach().cpu().numpy(),os.path.join(self.result_folder,'force.txt'))
+        delta_force=torch.bmm(self.force.transform,self.force.force_last_displace)
+        tool.write_data(delta_force[0].clone().detach().cpu().numpy(),os.path.join(self.result_folder,'transform_force_displace.txt'))
+
+        tool.write_data(self.force.now_forces[0].clone().detach().cpu().numpy(),os.path.join(self.result_folder,'last_force.txt'))
+
+
+
+
+
         tool.write_data(self.simu_index,os.path.join(self.result_folder,'index.txt'),x3=False)
         
         run_time=np.floor(time.time()-self.begin_time)

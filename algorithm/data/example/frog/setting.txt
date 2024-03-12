@@ -16,14 +16,9 @@
 
 1408 #center of the plane mesh
 
-6    #the number of points that forced by a rope
-2    #the number of points that forced by a stick and a reprojection
+4    #the number of points that forced by a stick and a reprojection
 0
-1
-4
-5
-56
-156  
-2
-3
+26
+33
+55
 

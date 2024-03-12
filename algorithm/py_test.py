@@ -17,21 +17,11 @@ import soft_renderer as sr
 from datetime import datetime
 import math
 def main():
-    x=np.zeros((2,1))
-    print(x[0],x[1])
-    np.append(x,values=np.array([[1],[3]]),axis=1)
-    print(x)
-
-    print(torch.cuda.device_count())
     x=torch.tensor([True,False,False,True,False])
-    y=x.unsqueeze(dim=0).reshape(5,1).repeat(1,1,3)
-    print(y)
-    print(y.shape)
-    
-    x=torch.tensor([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])
-    print(x[0,0,0:2])
-    print(torch.norm(x,p=2,dim=2))
-    print(F.normalize(x,p=2,dim=2))
+    y=torch.tensor([False,False,False,False,False])
+    x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
+    print(x[:,0:3,:])
+    #print(torch.sum(x,dim=1))
     exit(0)
 
     print(datetime.now())
@@ -42,7 +32,6 @@ def main():
     exit(0)
     return datetime.now().replace(' ','-')
     
-    x=np.array([[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]])
     print(x)
     dis=np.sum(x*x,axis=1)
     print(dis)

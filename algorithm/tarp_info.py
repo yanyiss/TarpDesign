@@ -22,7 +22,7 @@ class tarp_info():
         G[:,:,2]=-data[2]*data[3]/self.nv
         self.G=torch.from_numpy(G).cuda()
         #maximum force on the rope   unit: N
-        self.Fmax=torch.tensor(data[4]).cuda()
+        self.Fmax=torch.tensor(data[4]+200).cuda()
         #minimum height of the tarp  unit: m
         self.Hmin=torch.tensor(data[5]).cuda()
         #the height of the sticks    unit: m
@@ -31,8 +31,33 @@ class tarp_info():
         self.Lmax=torch.tensor(data[7]).cuda()
         #index of mesh center which is fixed
         self.CI=torch.tensor(int(data[8])).cuda()
-        #vertex that connect with a rope
+        #vertex that connect with a stick
         self.C=torch.from_numpy(data[10:10+int(data[9])].astype(int)).cuda()
+        
+        self.boundary_index=0
+        self.boundary_weight=0
+        self.stick_index=0
+        self.rope_index=0
+        self.D=0
+
+        self.sparse_index=0
+
+    def update_info(self,params):
+        self.boundary_index,self.boundary_weight=tool.get_mesh_boundary(params.template_mesh)
+        #yanyisheshou
+        if params.opt_method=='manu':
+            f=np.loadtxt(os.path.join(params.initial_dir,'last_force.txt'),dtype=np.float64)
+            f=torch.from_numpy(f).reshape(1,f.shape[0],3).cuda().double()
+            norm2=torch.sqrt((f**2).sum(dim=2)).squeeze()
+            self.sparse_index=torch.nonzero(norm2>1.0).squeeze()
+            self.boundary_index=self.boundary_index[self.sparse_index]
+            self.boundary_weight=torch.ones_like(self.boundary_weight[self.sparse_index])
+
+        self.stick_index=self.C.clone()
+        for i,value in enumerate(self.C):
+            self.stick_index[i]=torch.nonzero(torch.eq(self.boundary_index,value))
+        self.rope_index=tool.suppleset(torch.from_numpy(np.arange(0,self.boundary_index.shape[0])).cuda(),self.stick_index)
+        self.D=tool.suppleset(self.boundary_index,self.C)
 
 class tarp_params():
     def __init__(self):
@@ -41,6 +66,9 @@ class tarp_params():
         self.current_dir=meta_params['current_dir']
         self.data_dir=meta_params['data_dir']
         self.example_dir=meta_params['example_dir']
+        #optimization method
+        self.opt_method=meta_params['opt_method']
+        self.initial_dir=os.path.join(meta_params['output_dir'],meta_params['initial_dir'])
         #source file
         self.example_name=meta_params['example_name']
         self.template_mesh=os.path.join(self.example_dir,self.example_name,self.example_name+'.obj')
@@ -103,12 +131,14 @@ class tarp_params():
         self.cosine_delay=meta_params['cosine_delay']
         self.image_weight=meta_params['image_weight']
         self.fixed_weight=meta_params['fixed_weight']
+        self.rope_weight=meta_params['rope_weight']
         self.fmax_weight=meta_params['fmax_weight']
         self.fdir_weight=meta_params['fdir_weight']
         self.fnorm1_weight=meta_params['fnorm1_weight']
         #loss type
         self.loss_type=meta_params['loss_type']
         self.fixed_cons=meta_params['fixed_cons']
+        self.rope_cons=meta_params['rope_cons']
         self.fmax_cons=meta_params['fmax_cons']
         self.fdir_cons=meta_params['fdir_cons']
         self.fnorm1_cons=meta_params['fnorm1_cons']
@@ -123,7 +153,14 @@ import soft_renderer as sr
 import math
 class Tarp():
     def __init__(self,params):
-        template_mesh=sr.Mesh.from_obj(params.template_mesh)
+        #yanyisheshou
+        if params.opt_method=='initial':
+            template_mesh=sr.Mesh.from_obj(params.template_mesh)
+        elif params.opt_method=='manu':
+            template_mesh=sr.Mesh.from_obj(os.path.join(params.initial_dir,'result.obj'))
+        else:
+            print('opt method error')
+            exit(0)
         self.batch_size=params.batch_size
         #self.vertices=template_mesh.vertices
         self.vertices=torch.zeros_like(template_mesh.vertices)
@@ -144,6 +181,8 @@ class Tarp():
 
         data=np.loadtxt(params.info_path,dtype=np.float64)
         self.tarp_info=tarp_info(self.vertices,data)
+        self.tarp_info.update_info(params)
+
 
     def set_sampling(self,sampling_lambda):
         if self.sample_num>1:

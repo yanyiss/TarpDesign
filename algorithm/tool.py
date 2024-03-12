@@ -16,8 +16,6 @@ def force_SOCP(vertices,index,center_id,reference_norm):
     dir_norm=np.linalg.norm(dir,axis=1,keepdims=True)
     dir=np.divide(dir,dir_norm).flatten()
     
-    #dir[:]=1.0
-
     m=index.cpu().numpy().shape[0]
     n=m*2
     p=2
@@ -92,6 +90,12 @@ def get_mesh_boundary(mesh_dir):
         v2=mesh.point(mesh.to_vertex_handle(mesh.next_halfedge_handle(hl_iter)))
         v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
         v_weight=np.append(v_weight,calc_angle_weight(v0,v1,v2,z))
+    """ x,y=torch.from_numpy(v_index.astype(int)).cuda(),torch.from_numpy(v_weight).cuda()
+    print(x)
+    print(y) """
+    index_torch=torch.from_numpy(v_index.astype(int)).cuda()
+    weight_torch=torch.from_numpy(v_weight).cuda()
+    
     return torch.from_numpy(v_index.astype(int)).cuda(),torch.from_numpy(v_weight).cuda()
 
 
@@ -161,7 +165,7 @@ from cupyx.scipy.sparse import coo_matrix,csr_matrix, linalg as sla
 from torch.utils.dlpack import to_dlpack
 from torch.utils.dlpack import from_dlpack
 import time
-class jacobi_solver():
+class linear_solver():
     def __init__(self):
         self.right=0
         self.lu_solver=0
@@ -181,7 +185,7 @@ class jacobi_solver():
 
     def solve(self):
         x=self.lu_solver.solve(self.right)
-        return from_dlpack(x.toDlpack()).unsqueeze(dim=0)
+        return from_dlpack(x.toDlpack())
 
 
 def compute_jacobi(row,col,val,right):
@@ -249,7 +253,6 @@ class LossDrawer():
     
     def update(self,id,force,geometry,shadow):
         if id%self.params.updateplt_hz==0:
-            mod_id=id/self.params.updateplt_hz
 
             fmax_loss_cpu=self.transfer(force.fmax_loss)
             fdir_loss_cpu=self.transfer(force.fdir_loss)
@@ -257,6 +260,7 @@ class LossDrawer():
             geometry_loss_cpu=self.transfer(geometry.geometry_loss)
             shadow_loss_cpu=self.transfer(shadow.shadow_loss)
             total_loss_cpu=fmax_loss_cpu+fdir_loss_cpu+fnorm1_loss_cpu+geometry_loss_cpu+shadow_loss_cpu
+            #total_loss_cpu=fmax_loss_cpu+fdir_loss_cpu+fnorm1_loss_cpu+shadow_loss_cpu
             self.figure_x.append(id)
             self.figure_fmax_loss.append(fmax_loss_cpu)
             self.figure_fdir_loss.append(fdir_loss_cpu)
