@@ -1,12 +1,10 @@
 import torch
-import torch.nn as nn
 import numpy as np
 import imageio
 import algorithm.tarp_info as TI
 import algorithm.tool as tool
 import soft_renderer as sr
 import os
-import time
 
 params=TI.tarp_params()
 
@@ -38,7 +36,7 @@ class Shadow():
         if params.loss_type=='image':
             self.shadow_loss=torch.sum((self.shadow_image-self.target_image)**2)/(params.image_size*params.image_size)*params.image_weight
         elif params.loss_type=='area':
-            self.shadow_loss=(0.2-torch.sum(self.shadow_image)/(params.image_size*params.image_size))*params.image_weight
+            self.shadow_loss=(0.0-torch.sum(self.shadow_image[3,:,:])/(params.image_size*params.image_size))*params.image_weight
         else:
             self.shadow_loss=torch.tensor([0]).cuda()
             print('error in shadow type')

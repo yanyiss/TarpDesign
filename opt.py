@@ -72,14 +72,14 @@ class deform():
         #init other class
         self.geometry=geometry.Geometry(self.tarp,self.force)
         self.shadow=shadow.Shadow(self.tarp)
-        #self.optimizer=torch.optim.SGD(self.force.parameters(),lr=params.learning_rate)
-        self.optimizer = torch.optim.Adam(self.force.parameters(), lr=params.learning_rate,betas=(params.beta1,params.beta2))
+        #self.optimizer = torch.optim.Adam(self.force.parameters(), lr=params.learning_rate)
+        self.optimizer = torch.optim.SGD(self.force.parameters(), lr=params.learning_rate)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer,step_size=params.step_size,gamma=params.decay_gamma)
         self.loss_drawer=tool.LossDrawer(params)
 
         #others
-        self.loss=torch.tensor([1.0e8],device=torch.device("cuda"))
         self.small_gradient=False
+        self.openFnorm1Cons=params.fnorm1_cons==2
         self.stop=False
         self.itertimes=0
         self.simu_index=self.tarp.tarp_info.rope_index_in_mesh.clone().detach().cpu().numpy()
@@ -87,54 +87,56 @@ class deform():
         self.now_balance=params.balance_cof
         self.prev_time=time.perf_counter()
 
+        self.force_grad=self.force.force_last_displace
+        self.vertices_grad=self.tarp.vertices
+        self.fff=self.force.force_last_displace
+
 
         self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_min,params.newton_rate)
 
-    def get_loss(self,compute_jacobi=True,for_backward=True):
-        #compute balance
-        if self.itertimes%params.accurate_hz==0:
-            self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_min,params.newton_rate)
-            #self.now_balance=self.now_balance*self.damping_rate
-            self.now_balance=params.balance_cof
-        else:
-            self.balance_solver.set_compute_balance_parameter(params.updategl_hz,self.now_balance,params.newton_rate)
-            self.now_balance=params.balance_cof
-
-        while True:
-            self.balance_solver.compute_balance()
-            if self.balance_solver.balance_result<self.now_balance:
-                break
-        
-        #forward
-        if self.itertimes%params.update_w_hz==0 and self.itertimes > params.update_start-2:
-            self.force.update_weight()
-            #self.force.restart_sparse()
-
-        if self.balance_solver.x_invariant==False and compute_jacobi:
-        #if compute_jacobi:
-            self.balance_solver.compute_csr()
-            self.jacobi_solver.lu(self.balance_solver.jacobirow,self.balance_solver.jacobicol,self.balance_solver.jacobival)
-            self.middlejacobi=self.jacobi_solver.solve().unsqueeze(dim=0)
-            
-        self.optimizer.zero_grad()
-        self.tarp.vertices=tool.py_simulation.apply(self.force.force_displace,self.balance_solver,self.middlejacobi)
-        shadow_loss=self.shadow.loss_evaluation()
-        geometry_loss=self.geometry.loss_evaluation()
-        if for_backward:
-            barrier_loss=self.force()
-        else:
-            barrier_loss=self.force.loss_evaluation()
-        return barrier_loss+geometry_loss+shadow_loss
 
     def one_iterate(self):
         print('\n\nitertimes:',self.itertimes)
 
+        #compute balance
+        if self.itertimes%params.accurate_hz==0:
+            self.balance_solver.set_compute_balance_parameter(params.updategl_hz,params.balance_min,params.newton_rate)
+            self.now_balance=self.now_balance*self.damping_rate
+        else:
+            self.balance_solver.set_compute_balance_parameter(params.updategl_hz,self.now_balance,params.newton_rate)
+        self.balance_solver.compute_balance()
+        if self.balance_solver.balance_result>self.now_balance:
+            return
         
-        self.force.compute_now_forces()
-        self.balance_solver.set_forces(self.force.now_force.clone().detach().cpu().numpy().flatten())
-        #loss=barrier_loss
+        #forward
+        if self.itertimes%params.update_w_hz==0 and self.itertimes > params.update_start-2:
+            if params.fnorm1_cons==2:
+                self.force.update_weight()
+            elif params.fnorm1_cons==1:
+                if self.openFnorm1Cons==False:
+                    self.force.weight=torch.tensor([1.0],device=torch.device("cuda"))
+                    self.openFnorm1Cons=True
+                self.force.update_weight()
+
+        if self.balance_solver.x_invariant==False:
+            self.balance_solver.compute_csr()
+            self.jacobi_solver.lu(self.balance_solver.jacobirow,self.balance_solver.jacobicol,self.balance_solver.jacobival)
+            self.middlejacobi=self.jacobi_solver.solve().unsqueeze(dim=0)
+            
+
+        self.tarp.vertices=tool.py_simulation.apply(self.force.force_displace,self.balance_solver,self.middlejacobi)
+        #test initial data validity
+        if self.itertimes==0:
+            if self.geometry.test_validity()==False:
+                print('invalid initial data')
+                exit(0)
+
+        shadow_loss=self.shadow.loss_evaluation()
+        geometry_loss=self.geometry.loss_evaluation()
         self.force.record_last_displace()
-        self.loss=self.get_loss()
+        barrier_loss=self.force()
+        loss=barrier_loss+geometry_loss+shadow_loss
+        #loss=barrier_loss
         
         #update loss figure
         self.loss_drawer.update(self.itertimes,self.force,self.geometry,self.shadow)
@@ -146,20 +148,21 @@ class deform():
             self.write_results()
         
         #backward
-        self.loss.backward()
+        self.tarp.vertices.retain_grad()
+        shadow_loss.backward(retain_graph=True)
+        self.force_grad=-self.force.force_displace.grad.clone().detach()
+        self.vertices_grad=-self.tarp.vertices.grad.clone().detach()
+        loss.backward()
+        self.fff=-self.force.force_displace.grad.clone().detach()
+        print('norm ',torch.norm(self.force_grad-self.fff))
         self.optimizer.step()
         self.scheduler.step()
 
-        if params.use_proximal:
-            self.proximal_processing()
         if params.rope_cons or params.fmax_cons or params.fdir_cons:
             self.geometry.linesearch()
+        self.force.compute_now_forces()
+        self.balance_solver.set_forces(self.force.now_force.clone().detach().cpu().numpy().flatten())
         
-        #forward
-        if self.itertimes%params.update_w_hz==0 and self.itertimes > params.update_start-2:
-            #self.force.update_weight()
-            self.force.restart_sparse()
-            
         #terminate condition
         delta=(self.force.force_displace-self.force.force_last_displace).clone().detach().cpu().numpy()
         if (delta**2).sum()<params.grad_error*0 or self.itertimes > params.max_iter-params.updategl_hz:
@@ -178,36 +181,6 @@ class deform():
         print('one iteration time',time.perf_counter()-self.prev_time)
         self.prev_time=time.perf_counter()
         self.itertimes=self.itertimes+1
-
-    def prox(self,value):
-        mag=torch.sqrt((value**2).sum(dim=2,keepdim=True)).repeat(1,1,3)
-        alpha_lambda=self.force.l1_alpha*params.fnorm1_weight
-        return torch.where(mag>alpha_lambda,(1.0-alpha_lambda/mag)*value,0.0)
-    
-    def proximal_processing(self):
-        if params.fnorm1_cons==0 or params.use_proximal==0:
-            return
-        force=self.force
-        df=force.force+force.force_last_displace-\
-            self.prox(force.force+force.force_last_displace-force.l1_alpha*(force.force_last_displace-force.force_displace))
-        force.force_displace.data=force.force_last_displace-df
-        return
-        # force.compute_now_forces()
-        # compare_loss=self.get_loss(False,False)
-        # itr=0
-        # while True:
-        #     force.force_displace.data=force.force_last_displace-df
-        #     force.compute_now_forces()
-        #     search_loss=self.get_loss(False,False)
-        #     print(search_loss,compare_loss,search_loss-compare_loss,df.norm())
-        #     if search_loss<compare_loss:
-        #         break
-        #     df=df*params.l1_beta
-        #     itr=itr+1
-        #     if itr>20:
-        #         df=df*0.0
-        #         break
-
 
     def write_params(self):
         tool.copy_file(os.path.join(params.current_dir,'params.yaml'),self.result_folder)

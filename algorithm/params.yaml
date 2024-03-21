@@ -1,16 +1,7 @@
-#optimization method: initial, manu
-opt_method:       initial
-initial_dir:      2024-03-09-17-48-49-898115
-
 #source file
-example_name:     hex06
+example_name:     turtle_big
 image:            image/square.png
 output_dir:       results
-
-#dense file
-force_file:       denseInfo/force.txt
-forcedis_file:    denseInfo/force_displace.txt
-result_mesh:      denseInfo/result.obj
 
 #save file setting
 saveshadow_hz:    5000
@@ -18,7 +9,7 @@ saveloss_hz:      100
 saveresult_hz:    200
 
 #rendering
-IMAGE_SIZE:       128
+IMAGE_SIZE:       256
 SIGMA_VAL:        0.0001
 GAMMA_VAL:        0.00000001
 VIEW_ANGLE:       4
@@ -26,10 +17,10 @@ VIEW_SCALE:       0.25
 
 #solar condition, sample_type: time or arc
 loc_latitude:     31
-dir_latitude:     23
+dir_latitude:     31
 start_moment:     12.0
 end_moment:       14.0
-sample_num:       20
+sample_num:       1
 sample_type:      time
 
 #gui
@@ -40,50 +31,52 @@ updategl_hz:      50
 updateplt_hz:     50
 
 #simulation
-BALANCE_COF:      0.01
-BALANCE_MIN:      0.01
-NEWTON_RATE:      0.00001
+BALANCE_COF:      0.000001
+BALANCE_MIN:      0.000001
+NEWTON_RATE:      0.0000001
 ACCURATE_HZ:      100
 rot:              0
-horizontal_load:  2.0
-vertical_load:    1.0
+horizontal_load:  1.0
+vertical_load:    5.0
+use_bending:      1
 
 #optimization setting
 STEP_SIZE:        100
 DECAY_GAMMA:      0.99
 LEARNING_RATE:    0.001
-MAX_ITER:         80000
-update_start:     15000
-update_w_hz:      8000
+beta1:            0.3
+beta2:            0.3
+MAX_ITER:         10000
+update_start:     10000
+update_w_hz:      2000
 grad_error:       0.0000000001
 nume_error:       0.00001
-enable_prox:      0
 
 #optimization parameter
 l1_xi:            1.0
 l1_eta:           0.0
 l1_rho:           0.5
-l1_epsilon:       0.01
+l1_epsilon:       0.000001
 l1_alpha:         0.2
-l1_beta:          0.5
+l1_beta:          0.8
 
 force_delay:      10.0
 cosine_delay:     0.001
 image_weight:     1.0
 fixed_weight:     1.0
-rope_weight:      0.001
+rope_weight:      0.0001
 fmax_weight:      0.0005
 fdir_weight:      0.0001
-fnorm1_weight:    0.0005
+fnorm1_weight:    0.002
 
 #loss type: image or area
 loss_type:        area
 fixed_cons:       0
 rope_cons:        1
-fmax_cons:        1
+fmax_cons:        0
 fdir_cons:        0
-fnorm1_cons:      2
+fnorm1_cons:      1
 
 #other
 batch_size:       1
-use_denseInfo:    0
+use_proximal:     0

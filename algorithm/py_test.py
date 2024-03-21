@@ -17,11 +17,10 @@ import soft_renderer as sr
 from datetime import datetime
 import math
 def main():
-    x=torch.tensor([True,False,False,True,False])
-    y=torch.tensor([False,False,False,False,False])
-    x=torch.tensor(np.array([[[1.0,2.0,3.0],[2.0,3.0,14.0],[3.0,4.0,5.0],[4.0,5.0,6.0]]])).cuda()
-    print(x[:,0:3,:])
-    #print(torch.sum(x,dim=1))
+    x=torch.tensor(np.array([[[10,2.0,36.0],[2.0,-3.0,14.0],[-3.0,4.0,5.0],[1.0,5.0,6.0]]])).cuda()
+    print(x)
+    y=F.normalize(x,dim=2)
+    print(y)
     exit(0)
 
     print(datetime.now())

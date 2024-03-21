@@ -6,15 +6,15 @@
 
 9.8  #gravitational acceleration  unit: m/s^2
 
-5e2  #maximum force on the rope   unit: N
+1e2  #maximum force on the rope   unit: N
 
 1.8  #minimum height of the tarp  unit: m
 
 2.45 #the height of the sticks    unit: m
 
-8    #maximum length of the rope  unit: m
+6    #maximum length of the rope  unit: m
 
-264 #center of the plane mesh
+1636 #center of the plane mesh
 
-4
+2    #the number of points that forced by a stick and a reprojection
 

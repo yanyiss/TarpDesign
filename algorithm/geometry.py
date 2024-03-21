@@ -13,45 +13,37 @@ class Geometry():
     def __init__(self,tarp,force):
         self.tarp=tarp
         self.force=force
-        # 以下有错误
-        # self.stick_index=tarp.tarp_info.C
-        # self.stick_value=self.tarp.vertices[:,self.stick_index,2].clone().detach()
         self.fixed_loss=torch.tensor([0.0],device=torch.device("cuda"))
         self.ropelength_loss=torch.tensor([0.0],device=torch.device("cuda"))
         self.geometry_loss=torch.tensor([0.0],device=torch.device("cuda"))
         self.zero=torch.tensor([0.0],device=torch.device("cuda"))
-        self.deltaforce=self.zero
 
     def logelp(self,x,elp=0.0):
         return torch.where(x<elp,-(x/elp-1.0)**2*torch.log(x/elp),0.0)
-    
-    def clampingX2(self,x,elp=0.0):
-        return torch.where(x<elp,(x-elp)**2,0.0)
-    
-    def clampingX3(self,x,elp=0.0):
-        return torch.where(x<elp,-(x-elp)**3,0.0)
     
     def fixed_constraint(self):
         return self.zero
     
     def ropelength_constraint(self):
-        down_norm_forces=F.normalize(self.force.now_forces,p=2,dim=2)[:,self.tarp.tarp_info.rope_index,2]
-        down_z_coordinate=self.tarp.vertices[:,self.tarp.tarp_info.D,2].clone().detach()
-        value=-down_norm_forces-down_z_coordinate/self.tarp.tarp_info.Lmax
-        minth=torch.min(value).clone().detach()
-        minth=torch.min(minth,torch.zeros_like(minth)+1e-3)
-        #theta=torch.min(value.clone().detach(),0.0)-1.0e-6
-        #print(self.logelp(value-minth+1e-5,2e-3-minth))
-        return self.logelp(value-minth+1e-5,2e-3-minth).sum()
-        return self.clampingX2(-down_norm_forces-down_z_coordinate/self.tarp.tarp_info.Lmax,1.0e-2).sum()
-        return self.logelp(-down_norm_forces-down_z_coordinate/self.tarp.tarp_info.Lmax,1e-3).sum()
-        return self.zero
+        down_norm_force=F.normalize(self.force.now_force,p=2,dim=2)[:,:,2]
+        down_z_coordinate=self.tarp.vertices[:,self.tarp.tarp_info.rope_index_in_mesh,2].clone().detach()
+        value=-down_norm_force-down_z_coordinate/self.tarp.tarp_info.Lmax
+        if torch.any(value<0):
+            print('rope constraint fail')
+        else:
+            print('rope constraint success')
+        value=value+torch.where(value<1e-6,-value.clone().detach()+2e-6,0.0)
+        return self.logelp(value,1e-1).sum()
+
+        # barrier_value=torch.min(value).clone().detach()
+        # barrier_value=torch.min(barrier_value,torch.zeros_like(barrier_value)+1e-3)
+        # #return -torch.log(value+2.001).sum()
+        # #return self.logelp(value+2.001,0.1).sum()
+        # return self.logelp(value-barrier_value+1e-5,2e-3-barrier_value).sum()
     
     def loss_evaluation(self):
         self.fixed_loss=self.fixed_constraint()*params.fixed_weight if params.fixed_cons else self.zero
-        #yanyisheshou
-        self.ropelength_loss=self.ropelength_constraint()*params.rope_weight if params.rope_cons & (params.opt_method=='manu') else self.zero
-        #self.ropelength_loss=self.ropelength_constraint()*params.rope_weight if params.rope_cons else self.zero
+        self.ropelength_loss=self.ropelength_constraint()*params.rope_weight if params.rope_cons else self.zero
         if torch.any(torch.isnan(self.ropelength_loss)):
             print('ropelength nan')
         self.geometry_loss=self.fixed_loss+self.ropelength_loss
@@ -62,10 +54,10 @@ class Geometry():
         # RopeLengthCondition=lambda f: -F.normalize(f,p=2,dim=2)[:,self.tarp.tarp_info.rope_index,2]-\
         #                                        self.tarp.vertices[:,self.tarp.tarp_info.D,2]/self.tarp.tarp_info.Lmax<params.nume_error
         self.force.compute_now_forces()
-        return ~torch.any(ForceMaxCondition(self.force.now_forces))
+        return ~torch.any(ForceMaxCondition(self.force.now_force))
 
     def search(self,cons,condition,info):
-        #return True
+        return True
         itertimes=0
         while cons:
             itertimes=itertimes+1

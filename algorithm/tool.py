@@ -20,7 +20,6 @@ def force_SOCP(vertices,index,center_id,reference_norm):
     n=m*2
     p=2
     
-
     A=[]
     d=[]
     for i in range(m):
@@ -64,7 +63,12 @@ def calc_angle_weight(v0,v1,v2,z):
     angle=torch.atan2(v10.cross(v12).dot(z),v10.dot(v12))
     if angle<0:
         angle=angle+math.pi*2
-    return angle.cpu()/math.pi
+    regu_angle=angle.cpu()/math.pi
+    if regu_angle>1.0:
+        return (2.0-regu_angle).abs()
+    else:
+        return regu_angle.abs()
+    return 0.5*(regu_angle.abs()+(2.0-regu_angle).abs())
     
 def get_mesh_boundary(mesh_dir):
     mesh=openmesh.read_trimesh(mesh_dir)
@@ -90,26 +94,33 @@ def get_mesh_boundary(mesh_dir):
         v2=mesh.point(mesh.to_vertex_handle(mesh.next_halfedge_handle(hl_iter)))
         v_index=np.append(v_index,mesh.to_vertex_handle(hl_iter).idx())
         v_weight=np.append(v_weight,calc_angle_weight(v0,v1,v2,z))
-    """ x,y=torch.from_numpy(v_index.astype(int)).cuda(),torch.from_numpy(v_weight).cuda()
-    print(x)
-    print(y) """
-    index_torch=torch.from_numpy(v_index.astype(int)).cuda()
-    weight_torch=torch.from_numpy(v_weight).cuda()
-    
-    return torch.from_numpy(v_index.astype(int)).cuda(),torch.from_numpy(v_weight).cuda()
 
-
-    index=np.array([])
+    vertices=np.zeros((mesh.n_vertices(),3))
     for v in mesh.vertices():
-        if mesh.is_boundary(v):
-            index=np.append(index,v.idx())
-    """ index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2))
-    index=np.delete(index,np.arange(1,index.size,2)) """
-    """ index[3]=205
-    index[205]=3 """
-    return torch.from_numpy(index.astype(int)).cuda()
+        pos=mesh.point(v)
+        vertices[v.idx(),:]=pos
+
+    return torch.from_numpy(v_index.astype(int)).cuda(),torch.from_numpy(v_weight).cuda(), torch.from_numpy(vertices[v_index.astype(int),:])
+
+def get_spring(mesh_dir,s,bending=False):
+    mesh=openmesh.read_trimesh(mesh_dir)
+    spring=np.array([])
+    stiffness=np.array([])
+    for edge in mesh.edges():
+        h0=mesh.halfedge_handle(edge,0)
+        spring=np.append(spring,mesh.from_vertex_handle(h0).idx())
+        spring=np.append(spring,mesh.to_vertex_handle(h0).idx())
+        stiffness=np.append(stiffness,s)
+    if bending:
+        for edge in mesh.edges():
+            if mesh.is_boundary(edge):
+                continue
+            h0=mesh.halfedge_handle(edge,0)
+            spring=np.append(spring,mesh.opposite_vh(h0).idx())
+            h1=mesh.halfedge_handle(edge,1)
+            spring=np.append(spring,mesh.opposite_vh(h1).idx())
+            stiffness=np.append(stiffness,0.01*s)
+    return spring,stiffness
 
 def suppleset(a,b):
     c=a
@@ -137,10 +148,6 @@ def read_params():
     
     meta_params['image']=os.path.join(data_dir,meta_params['image'])
     meta_params['output_dir']=os.path.join(data_dir,meta_params['output_dir'])
-
-    meta_params['force_file']=os.path.join(data_dir,meta_params['force_file'])
-    meta_params['forcedis_file']=os.path.join(data_dir,meta_params['forcedis_file'])
-    meta_params['result_mesh']=os.path.join(data_dir,meta_params['result_mesh'])
     return meta_params
 
 
@@ -171,10 +178,7 @@ class linear_solver():
         self.lu_solver=0
 
     def compute_right(self,r):
-        self.right=cupy.zeros((r.shape[0],r.shape[1]))
-        for i in range(r.shape[0]):
-            for j in range(r.shape[1]):
-                self.right[i,j]=r[i,j]
+        self.right=cupy.asarray(r)
 
     def lu(self,row,col,val):
         curow=cupy.asarray(row)
@@ -187,26 +191,9 @@ class linear_solver():
         x=self.lu_solver.solve(self.right)
         return from_dlpack(x.toDlpack())
 
-
-def compute_jacobi(row,col,val,right):
-    curow=cupy.asarray(row)
-    cucol=cupy.asarray(col)
-    cuval=cupy.asarray(val.astype(np.float32))
-    left=coo_matrix((cuval,(curow,cucol)),shape=(right.shape[0],right.shape[0]))
-    lu=sla.splu(left)
-    x=lu.solve(right)
-    return from_dlpack(x.toDlpack()).unsqueeze(dim=0)
-
-def compute_jacobiright(right):
-    wideright=cupy.zeros((right.shape[0],right.shape[1]))
-    for i in range(right.shape[0]):
-        for j in range(right.shape[1]):
-            wideright[i,j]=right[i,j]
-    return wideright
-
 from datetime import datetime
 def get_datetime():
-    return str(datetime.now()).replace(' ','-').replace(':','-').replace('.','-')
+    return str(datetime.now()).replace(' ','---').replace(':','-').replace('.','-')
 
 import shutil
 def copy_file(file_name,file_dir):
@@ -281,45 +268,5 @@ class LossDrawer():
     def save_loss(self,result_dir,id):
         if id%self.params.saveloss_hz==0:
             plt.savefig(os.path.join(result_dir, 'loss.png'))
-    
-class LossyDrawer():
-    def __init__(self,params):
-        self.figure_index=np.zeros((params.max_iter),np.int32)
-        self.figure_data=np.zeros((6,params.max_iter),np.float32)
-        self.index_buffer=torch.zeros(params.updateplt_hz,dtype=torch.int32)
-        self.data_buffer=torch.zeros(6,params.updateplt_hz,dtype=torch.float32)
-
-        plt.ion()
-        self.params=params
-        self.start=0
-    
-    def transfer(self,loss):
-        return loss.clone().detach().cpu().numpy()
-    
-    def update(self,id,force,geometry,shadow):
-        mod_id=id%self.params.updateplt_hz
-        self.index_buffer[mod_id]=id
-        self.data_buffer[0,mod_id]=force.fmax_loss.clone().detach()
-        self.data_buffer[1,mod_id]=force.fdir_loss.clone().detach()
-        self.data_buffer[2,mod_id]=force.fnorm1_loss.clone().detach()
-        self.data_buffer[3,mod_id]=geometry.geometry_loss.clone().detach()
-        self.data_buffer[4,mod_id]=shadow.shadow_loss.clone().detach()
-        self.data_buffer[5,mod_id]=self.data_buffer[0,mod_id]+self.data_buffer[1,mod_id]+\
-                                   self.data_buffer[2,mod_id]+self.data_buffer[3,mod_id]+self.data_buffer[4,mod_id]
-        
-        if mod_id+1==self.params.updateplt_hz:
-            self.figure_index[id-self.params.updateplt_hz+1:id+1]=self.index_buffer.cpu().numpy()
-            self.figure_data[:,id-self.params.updateplt_hz+1:id+1]=self.data_buffer.cpu().numpy()
-            plt.clf()
-            plt.plot(self.figure_index[0:id+1],self.figure_data[0,0:id+1],label="force maximum barrier loss",color="magenta")
-            plt.plot(self.figure_index[0:id+1],self.figure_data[1,0:id+1],label="force direction barrier loss",color="cyan")
-            plt.plot(self.figure_index[0:id+1],self.figure_data[2,0:id+1],label="force l1-norm loss",color='peru')
-            plt.plot(self.figure_index[0:id+1],self.figure_data[3,0:id+1],label="geometry loss",color='cornflowerblue')
-            plt.plot(self.figure_index[0:id+1],self.figure_data[4,0:id+1],label="shadow loss",color='lightgreen')
-            plt.plot(self.figure_index[0:id+1],self.figure_data[5,0:id+1],label="total loss",color='red')
-            plt.legend(loc="upper right")
-
-    def save_loss(self,result_dir,id):
-        if id%self.params.saveloss_hz==0:
-            plt.savefig(os.path.join(result_dir, 'loss.png'))
+   
     

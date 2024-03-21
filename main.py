@@ -17,7 +17,6 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 
 import algorithm.opt as opt
-import algorithm.gui_info as gui_info
 """ AXIS_DICT = {
     "X" : [1,0,0],
     "Y" : [0,1,0],
@@ -35,7 +34,7 @@ class SimulationWidget(QOpenGLWidget):
         
         # Camera properties
         self.cam_position = np.array([0.0, -5.0, 5.0])
-        self.cam_target = np.array([0.0, 0.0, 3.45])
+        self.cam_target = np.array([0.0, 0.0, 2.45])
         self.cam_up_vector = np.array([0.0, 0.0, 1.0])
         
         self.rotate_speed = 0.01
@@ -50,7 +49,7 @@ class SimulationWidget(QOpenGLWidget):
         self.df.set_init_force() """
 
         self.opt=opt.deform()
-        self.gui_info=gui_info.GUI_INFO(self.opt)
+        self.force_index=self.opt.simu_index
 
     
     def mousePressEvent(self, event):
@@ -81,8 +80,10 @@ class SimulationWidget(QOpenGLWidget):
 
 
         #draw triangle mesh
-        vertices=self.gui_info.vertices
-        faces=self.gui_info.faces
+        print('draw vertices')
+        vertices=self.opt.tarp.vertices[0].clone().detach().cpu().numpy()
+        faces=self.opt.tarp.faces[0].clone().detach().cpu().numpy()
+        print('draw vertices done')
         glColor3f(1.0,1.0,0.0)
         glBegin(GL_TRIANGLES)
         for face in faces:
@@ -102,21 +103,61 @@ class SimulationWidget(QOpenGLWidget):
             glVertex3f(vertices[face[1]][0],vertices[face[1]][1],vertices[face[1]][2])
             glVertex3f(vertices[face[2]][0],vertices[face[2]][1],vertices[face[2]][2])
         glEnd()
-
-        boundary_index=self.gui_info.boundary_index
-        rate=0.8
-        forces=self.gui_info.forces*rate
         
-        #draw current force
+        # boundary_index=self.gui_info.boundary_index
+        # rate=0.8
+        # forces=self.gui_info.forces*rate
+        
+
+        #draw force 
+        force=self.opt.force.now_force[0].clone().detach().cpu().numpy()
         id=0
         glLineWidth(2)
-        glBegin(GL_LINES)
         glColor3f(0.7,0.0,0.0)
-        for i in boundary_index:
+        glBegin(GL_LINES)
+        for i in self.force_index:
             glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
-            glVertex3f(vertices[i][0]+forces[id][0],vertices[i][1]+forces[id][1],vertices[i][2]+forces[id][2])
+            glVertex3f(vertices[i][0]+force[id][0],vertices[i][1]+force[id][1],vertices[i][2]+force[id][2])
             id=id+1
         glEnd()
+
+
+        #draw force grad
+        force_grad=self.opt.force_grad[0].clone().detach().cpu().numpy()*50
+        id=0
+        glLineWidth(2)
+        glColor3f(0.0,0.5,0.0)
+        glBegin(GL_LINES)
+        for i in self.force_index:
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices[i][0]+force_grad[id][0],vertices[i][1]+force_grad[id][1],vertices[i][2]+force_grad[id][2])
+            id=id+1
+        glEnd()
+
+        #draw fff grad
+        fff=self.opt.fff[0].clone().detach().cpu().numpy()*50
+        id=0
+        glLineWidth(2)
+        glColor3f(0.5,0.5,0.0)
+        glBegin(GL_LINES)
+        for i in self.force_index:
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices[i][0]+fff[id][0],vertices[i][1]+fff[id][1],vertices[i][2]+fff[id][2])
+            id=id+1
+        glEnd()
+
+        #draw vertices grad
+        vertices_grad=self.opt.vertices_grad[0].clone().detach().cpu().numpy()*1000
+        id=0
+        glLineWidth(2)
+        glColor3f(0.0,0.0,0.7)
+        glBegin(GL_LINES)
+        for i in range(vertices.shape[0]):
+            glVertex3f(vertices[i][0],vertices[i][1],vertices[i][2])
+            glVertex3f(vertices[i][0]+vertices_grad[i][0],vertices[i][1]+vertices_grad[i][1],vertices[i][2]+vertices_grad[i][2])
+            id=id+1
+        glEnd()
+
         
 
         #draw axis
@@ -137,21 +178,7 @@ class SimulationWidget(QOpenGLWidget):
         glFlush()
 
     def update_simulation(self):
-        delta_time = 0.001  # Time step
-        if self.opt.itertimes>opt.params.max_iter-opt.params.updategl_hz:
-            return
-        if self.opt.small_gradient:
-            return 
-        self.gui_info.update(self.opt)
-        for i in range(0,opt.params.updategl_hz):
-            if self.opt.stop:
-                return
-            self.opt.one_iterate()
-        #self.opt.one_iterate()
-        # if self.opt.itertimes%50==0:
-        #     self.gui_info.update(self.opt)
-        # self.opt.one_iterate()
-        # self.update()
+        self.opt.one_iterate()
         
 
     def timerEvent(self, event):
@@ -240,17 +267,7 @@ class MainWindow(QMainWindow):
 
 import torch
 if __name__ == "__main__":
-    if torch.cuda.device_count()==1:
-        app = QApplication(sys.argv)
-        widget = MainWindow()
-        widget.show()
-        sys.exit(app.exec_())
-    elif torch.cuda.device_count()==4:
-        opts=opt.deform()
-        for i in range(100000):
-            if opts.stop:
-                exit(0)
-            for i in range(opt.params.updategl_hz):
-                if opts.stop:
-                    exit(0)
-                opts.one_iterate()
+    app = QApplication(sys.argv)
+    widget = MainWindow()
+    widget.show()
+    sys.exit(app.exec_())

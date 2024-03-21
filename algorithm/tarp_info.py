@@ -2,11 +2,9 @@ import torch
 import numpy as np
 import algorithm.tool as tool
 import os
-
+from algorithm.balance_solver import *
 class tarp_info():
     def __init__(self,vertex,data):
-
-        batch_size=vertex.size(0)
         self.nv = vertex.size(1)
         
         #small coef
@@ -17,10 +15,6 @@ class tarp_info():
         self.mass=torch.tensor(data[2]).cuda()
         #gravity acceleration        unit: m/(s^2)
         self.g=torch.tensor(data[3]).cuda()
-        #gravity                     unit: N
-        G=np.zeros([batch_size,self.nv,3]).astype(np.float64)
-        G[:,:,2]=-data[2]*data[3]/self.nv
-        self.G=torch.from_numpy(G).cuda()
         #maximum force on the rope   unit: N
         self.Fmax=torch.tensor(data[4]+200).cuda()
         #minimum height of the tarp  unit: m
@@ -31,33 +25,28 @@ class tarp_info():
         self.Lmax=torch.tensor(data[7]).cuda()
         #index of mesh center which is fixed
         self.CI=torch.tensor(int(data[8])).cuda()
+        #num of sticks
+        self.Sn=torch.tensor(int(data[9])).cuda()
         #vertex that connect with a stick
-        self.C=torch.from_numpy(data[10:10+int(data[9])].astype(int)).cuda()
+        #self.stick_index_in_mesh=torch.from_numpy(data[10:10+int(data[9])].astype(int)).cuda()
         
         self.boundary_index=0
         self.boundary_weight=0
-        self.stick_index=0
-        self.rope_index=0
-        self.D=0
-
-        self.sparse_index=0
+        self.rope_index_weight=0
+        self.stick_index_in_boundary=0
+        self.stick_index_in_mesh=0
+        self.rope_index_in_boundary=0
+        self.rope_index_in_mesh=0
 
     def update_info(self,params):
-        self.boundary_index,self.boundary_weight=tool.get_mesh_boundary(params.template_mesh)
-        #yanyisheshou
-        if params.opt_method=='manu':
-            f=np.loadtxt(os.path.join(params.initial_dir,'last_force.txt'),dtype=np.float64)
-            f=torch.from_numpy(f).reshape(1,f.shape[0],3).cuda().double()
-            norm2=torch.sqrt((f**2).sum(dim=2)).squeeze()
-            self.sparse_index=torch.nonzero(norm2>1.0).squeeze()
-            self.boundary_index=self.boundary_index[self.sparse_index]
-            self.boundary_weight=torch.ones_like(self.boundary_weight[self.sparse_index])
-
-        self.stick_index=self.C.clone()
-        for i,value in enumerate(self.C):
-            self.stick_index[i]=torch.nonzero(torch.eq(self.boundary_index,value))
-        self.rope_index=tool.suppleset(torch.from_numpy(np.arange(0,self.boundary_index.shape[0])).cuda(),self.stick_index)
-        self.D=tool.suppleset(self.boundary_index,self.C)
+        self.boundary_index,self.boundary_weight,boundary_vertices=tool.get_mesh_boundary(params.template_mesh)
+        sticklooker=stickLooker()
+        sticklooker.stick_locating(boundary_vertices,self.Sn.cpu())
+        self.stick_index_in_boundary=torch.from_numpy(sticklooker.stick_index).cuda().long()
+        self.stick_index_in_mesh=self.boundary_index[self.stick_index_in_boundary]
+        self.rope_index_in_boundary=tool.suppleset(torch.from_numpy(np.arange(0,self.boundary_index.shape[0])).cuda(),self.stick_index_in_boundary)
+        self.rope_index_in_mesh=self.boundary_index[self.rope_index_in_boundary]
+        self.rope_index_weight=self.boundary_weight[self.rope_index_in_boundary]
 
 class tarp_params():
     def __init__(self):
@@ -66,19 +55,12 @@ class tarp_params():
         self.current_dir=meta_params['current_dir']
         self.data_dir=meta_params['data_dir']
         self.example_dir=meta_params['example_dir']
-        #optimization method
-        self.opt_method=meta_params['opt_method']
-        self.initial_dir=os.path.join(meta_params['output_dir'],meta_params['initial_dir'])
         #source file
         self.example_name=meta_params['example_name']
         self.template_mesh=os.path.join(self.example_dir,self.example_name,self.example_name+'.obj')
         self.info_path=os.path.join(self.example_dir,self.example_name,'setting.txt')
         self.image=meta_params['image']
         self.output_dir=meta_params['output_dir']
-        #dense file
-        self.force_file=meta_params['force_file']
-        self.forcedis_file=meta_params['forcedis_file']
-        self.result_mesh=meta_params['result_mesh']
         #save file setting
         self.saveshadow_hz=meta_params['saveshadow_hz']
         self.saveloss_hz=meta_params['saveloss_hz']
@@ -110,14 +92,16 @@ class tarp_params():
         self.rot=meta_params['rot']
         self.horizontal_load=meta_params['horizontal_load']
         self.vertical_load=meta_params['vertical_load']
+        self.use_bending=meta_params['use_bending']
         #optimization setting
         self.step_size=meta_params['STEP_SIZE']
         self.decay_gamma=meta_params['DECAY_GAMMA']
         self.learning_rate=meta_params['LEARNING_RATE']
+        self.beta1=meta_params['beta1']
+        self.beta2=meta_params['beta2']
         self.max_iter=meta_params['MAX_ITER']
         self.update_start=meta_params['update_start']
         self.update_w_hz=meta_params['update_w_hz']
-        self.enable_prox=meta_params['enable_prox']
         self.grad_error=meta_params['grad_error']
         self.nume_error=meta_params['nume_error']
         #optimization parameter
@@ -144,23 +128,15 @@ class tarp_params():
         self.fnorm1_cons=meta_params['fnorm1_cons']
         #other
         self.batch_size=meta_params['batch_size']
-        self.use_denseInfo=meta_params['use_denseInfo']
+        self.use_proximal=meta_params['use_proximal']
 
-        if self.enable_prox:
-            self.fnorm1_cons=0
 
 import soft_renderer as sr
 import math
 class Tarp():
     def __init__(self,params):
         #yanyisheshou
-        if params.opt_method=='initial':
-            template_mesh=sr.Mesh.from_obj(params.template_mesh)
-        elif params.opt_method=='manu':
-            template_mesh=sr.Mesh.from_obj(os.path.join(params.initial_dir,'result.obj'))
-        else:
-            print('opt method error')
-            exit(0)
+        template_mesh=sr.Mesh.from_obj(params.template_mesh)
         self.batch_size=params.batch_size
         #self.vertices=template_mesh.vertices
         self.vertices=torch.zeros_like(template_mesh.vertices)
